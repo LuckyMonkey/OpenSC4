@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import sc4_budget_probe
+import reference_capture
 from memory_observatory import ObservatoryError, open_memory, process_identity
 
 
@@ -108,6 +109,12 @@ def capture(args: argparse.Namespace) -> int:
     handle = open_memory(args.pid)
     run_id = args.run_id or uuid.uuid4().hex
     intervention = intervention_payload(args)
+    starting_save = None
+    if args.save is not None:
+        try:
+            starting_save = reference_capture.file_manifest(args.save, args.save_chunk_size)
+        except reference_capture.CaptureError as exc:
+            raise SystemIdError(str(exc)) from exc
     started = time.monotonic()
     deadline = started + args.duration
     records: list[dict[str, Any]] = []
@@ -138,6 +145,7 @@ def capture(args: argparse.Namespace) -> int:
                         "image_base": sample["image_base"],
                         "raw_bytes_recorded": False,
                         "raw_memory_written": False,
+                        "starting_save": starting_save,
                     },
                     "metrics": sample["metrics"],
                     "evidence": sample["evidence"],
@@ -283,6 +291,103 @@ def analyze(args: argparse.Namespace) -> int:
     return 0
 
 
+def read_analysis(path: Path) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemIdError(f"cannot read analysis {path}: {exc}") from exc
+    if not isinstance(value, dict) or value.get("schema") != ANALYSIS_SCHEMA:
+        raise SystemIdError(f"unexpected analysis schema: {path}")
+    return value
+
+
+def sign_consistency(values: list[float]) -> str:
+    signs = {1 if value > 0 else -1 if value < 0 else 0 for value in values}
+    if not signs:
+        return "no_values"
+    if len(signs) == 1:
+        return {1: "positive", -1: "negative", 0: "zero"}[next(iter(signs))]
+    return "mixed"
+
+
+def aggregate(args: argparse.Namespace) -> int:
+    analyses = [read_analysis(path) for path in args.analysis]
+    if len(analyses) < 2:
+        raise SystemIdError("aggregate requires at least two analysis files")
+    first_intervention = analyses[0].get("intervention", {})
+    input_field = first_intervention.get("field")
+    if any(item.get("intervention", {}).get("field") != input_field for item in analyses):
+        raise SystemIdError("all analyses must use the same input field")
+    metric_names = args.metric or sorted(
+        {metric for item in analyses for metric in item.get("metrics", {})}
+    )
+    cases: dict[str, dict[str, Any]] = {}
+    for item in analyses:
+        intervention = item.get("intervention", {})
+        value = intervention.get("after")
+        if value is None:
+            raise SystemIdError("every analysis needs an intervention after value")
+        key = str(value)
+        case = cases.setdefault(key, {"value": value, "analyses": []})
+        case["analyses"].append(item)
+
+    aggregated_metrics: dict[str, Any] = {}
+    for metric in metric_names:
+        metric_cases: list[dict[str, Any]] = []
+        for case in cases.values():
+            values: list[float] = []
+            deltas: list[float] = []
+            response_by_sample: dict[int, list[float]] = {}
+            for item in case["analyses"]:
+                metric_result = item.get("metrics", {}).get(metric)
+                if not metric_result:
+                    continue
+                sensitivity = metric_result.get("finite_difference_sensitivity", [])
+                paired_delta = metric_result.get("paired_delta", {})
+                values.append(numeric(sensitivity[-1], f"{metric}.sensitivity")) if sensitivity else None
+                if paired_delta.get("last") is not None:
+                    deltas.append(numeric(paired_delta["last"], f"{metric}.paired_delta"))
+                for index, value in enumerate(sensitivity):
+                    response_by_sample.setdefault(index, []).append(numeric(value, f"{metric}.sensitivity"))
+            sample_means = [
+                {"sample_index": index, **summarize(sample_values)}
+                for index, sample_values in sorted(response_by_sample.items())
+            ]
+            metric_cases.append(
+                {
+                    "input_after": case["value"],
+                    "replicates": len(values),
+                    "final_sensitivity": summarize(values),
+                    "final_paired_delta": summarize(deltas),
+                    "final_sensitivity_sign_consistency": sign_consistency(values),
+                    "response_by_sample": sample_means,
+                }
+            )
+        aggregated_metrics[metric] = sorted(metric_cases, key=lambda entry: float(entry["input_after"]))
+
+    result = {
+        "schema": "sc4-lab.sc4-system-id-aggregate.v1",
+        "created_utc": utc_now(),
+        "input": {
+            "field": input_field,
+            "unit": first_intervention.get("unit"),
+            "analysis_files": [str(path) for path in args.analysis],
+        },
+        "metrics": aggregated_metrics,
+        "interpretation": {
+            "status": "replicate_summary",
+            "reference_claim": True,
+            "causation_claim": False,
+            "equivalence_claim": False,
+            "simulation_time_status": "unavailable; wall-clock axis remains diagnostic",
+            "next_step": "use sign consistency and response variance to choose a held-out intervention",
+        },
+    }
+    write_json(args.out, result)
+    print(json.dumps({"out": str(args.out), "analyses": len(analyses), "metrics": list(aggregated_metrics)}))
+    return 0
+
+
 def plan(args: argparse.Namespace) -> int:
     values = [float(value) for value in args.values]
     if not values:
@@ -337,6 +442,8 @@ def parser() -> argparse.ArgumentParser:
     capture_parser.add_argument("--input-after", type=float)
     capture_parser.add_argument("--input-unit", default="unknown")
     capture_parser.add_argument("--application", choices=("native_setter", "ui", "memory_write", "none"), default="none")
+    capture_parser.add_argument("--save", type=Path, help="optional starting save; only hash/chunk metadata is recorded")
+    capture_parser.add_argument("--save-chunk-size", type=int, default=4096)
     capture_parser.add_argument("--duration", type=float, default=0.0)
     capture_parser.add_argument("--interval", type=float, default=2.0)
     capture_parser.add_argument("--image-name", default="SimCity 4.exe")
@@ -348,6 +455,11 @@ def parser() -> argparse.ArgumentParser:
     analyze_parser.add_argument("--input-delta", type=float)
     analyze_parser.add_argument("--metric", action="append")
     analyze_parser.add_argument("--out", type=Path, required=True)
+
+    aggregate_parser = sub.add_parser("aggregate", help="summarize repeated paired analyses")
+    aggregate_parser.add_argument("--analysis", type=Path, nargs="+", required=True)
+    aggregate_parser.add_argument("--metric", action="append")
+    aggregate_parser.add_argument("--out", type=Path, required=True)
 
     plan_parser = sub.add_parser("plan", help="write a controlled intervention plan")
     plan_parser.add_argument("--experiment-id", required=True)
@@ -370,6 +482,8 @@ def main() -> int:
             return capture(args)
         if args.command == "analyze":
             return analyze(args)
+        if args.command == "aggregate":
+            return aggregate(args)
         return plan(args)
     except (OSError, ObservatoryError, SystemIdError, ValueError) as exc:
         print(f"SC4 SYSTEM ID FAILED: {exc}", file=sys.stderr)

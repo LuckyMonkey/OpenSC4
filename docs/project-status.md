@@ -31,7 +31,7 @@ claim.
 | Live SC4 hashed capture | First runtime milestone | 859 launch regions, 913 city regions, 143 transition changes |
 | SC4 tax path | First native distillation milestone | Proven rate storage/getter/setter and tax-income writer boundary; full taxable-base formula pending |
 | SC4 budget telemetry | Implemented, live capture | Authoritative funds/tax-rate/category-total probe; 45-sample while-playing transition captured |
-| SC4 system identification | Tooling milestone | Read-only series capture, paired finite differences, response summaries, and controlled-run plans; first paired tax run pending |
+| SC4 system identification | Tooling milestone | Read-only series capture, paired finite differences, replicate aggregation, guarded tax intervention, response summaries, and controlled-run plans; first paired tax run pending |
 
 ## Current strengths
 
@@ -85,9 +85,13 @@ claim.
   read-only probe follows the budget global and captures funds, tax income,
   twelve tax rates, and per-category totals without screenshot inference.
 - `tools/sc4_system_id.py` can now capture those verified fields as structured
-  response series and compare a baseline against an intervention. It does not
-  apply interventions and it does not claim a month-level response until a
+  response series, compare a baseline against an intervention, aggregate
+  repeated runs, and retain optional starting-save hashes. It does not apply
+  interventions and it does not claim a month-level response until a
   simulation clock field is verified.
+- `tools/sc4_tax_intervention.py` provides a dry-run-first native setter
+  operator. It was not applied to the active city in this milestone; category
+  mapping and the taxable-base function remain open.
 - OpenGlassBox has its own simulation concepts and a dual GPL/commercial
   licensing policy; dependency review is required before distribution.
 

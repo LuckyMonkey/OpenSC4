@@ -12,7 +12,9 @@ functions, alter saves, or upload data.
 - `plan`: create a factor plan without fabricating observations;
 - `capture`: record a live budget series using the verified budget probe;
 - `analyze`: pair two series by sample index and calculate finite-difference
-  sensitivities, discrete response derivatives, and response area.
+  sensitivities, discrete response derivatives, and response area;
+- `aggregate`: combine repeated paired analyses by intervention value and
+  report replicate variance and sign consistency.
 
 The current telemetry exposes funds, tax income, tax rates, and tax category
 totals. It does not yet expose a verified simulation month or tick. Until that
@@ -51,6 +53,21 @@ Capture a baseline and an intervention run separately. The intervention
 metadata records what the operator changed through a valid game/native setter;
 the capture itself does not apply the change.
 
+For a controlled tax-rate step, first inspect the current fields with the
+guarded operator in dry-run mode:
+
+```bash
+python3 tools/sc4_tax_intervention.py \
+  --pid <PID> --index <0-11> --value 10 \
+  --out /tmp/sc4-tax-intervention-plan.json
+```
+
+The operator resolves the current budget pointer and setter address on every
+run. It refuses out-of-range indices/rates and refuses to invoke GDB unless
+both `--apply` and `--ack-runtime-write` are present. Applying it changes only
+the running process; it does not save the city. The category mapping is not
+assumed, so an index must not be called “commercial” until separately proven.
+
 ```bash
 python3 tools/sc4_system_id.py capture \
   --pid <PID> \
@@ -60,6 +77,7 @@ python3 tools/sc4_system_id.py capture \
   --input-field commercial_tax_rate \
   --input-before 9 --input-after 9 --input-unit percent \
   --application native_setter \
+  --save /path/to/disposable-city.sc4 \
   --duration 180 --interval 2 \
   --out /tmp/sc4-tax-baseline.jsonl
 ```
@@ -69,7 +87,8 @@ For a 10% run, use a new disposable copy of the same starting save and record
 
 The JSON Lines output contains no raw memory bytes. Each record retains process
 identity, executable image base, budget-probe evidence, intervention metadata,
-sample index, and structured metrics. Keep live reference output outside Git.
+sample index, structured metrics, and (when `--save` is supplied) only the
+starting save's hash/chunk metadata. Keep live reference output outside Git.
 
 ## 3. Analyze a paired response
 
@@ -95,7 +114,27 @@ These are measurements, not recovered SC4 source formulas. A derivative is a
 description of the sampled response, not proof that SC4 uses calculus or a
 continuous function internally.
 
-## 4. Promotion rules
+## 4. Aggregate repeated runs
+
+Repeat the same paired experiment from independent copies of the same starting
+save, then aggregate the private analysis outputs:
+
+```bash
+python3 tools/sc4_system_id.py aggregate \
+  --analysis /tmp/tax-10-run-a.json \
+  --analysis /tmp/tax-10-run-b.json \
+  --analysis /tmp/tax-12-run-a.json \
+  --metric tax_income \
+  --metric tax_category_total_sum \
+  --out /tmp/sc4-tax-replicates.json
+```
+
+The aggregate groups by intervention value and reports final sensitivity,
+paired delta, response-by-sample summaries, replicate count, and whether the
+direction was consistent. Mixed signs or high variance are evidence to design
+another experiment, not permission to fit a stronger formula.
+
+## 5. Promotion rules
 
 Do not promote a fitted curve or correlation to a behavioral rule until:
 

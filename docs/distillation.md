@@ -191,11 +191,19 @@ subsystem and retain failed experiments as useful evidence.
   measurement progress, not a complete budget formula.
 - **D3.10 system-identification tooling complete:**
   `tools/sc4_system_id.py` now plans controlled runs, records read-only budget
-  response series, and computes paired finite-difference sensitivities and
-  step-response summaries. It intentionally marks simulation time unavailable
-  until a verified SC4 clock field is recovered. The runbook and milestone are
+  response series, computes paired finite-difference sensitivities and
+  step-response summaries, and aggregates repeated runs with variance and sign
+  consistency. It optionally records starting-save hashes without save bytes.
+  It intentionally marks simulation time unavailable until a verified SC4 clock
+  field is recovered. The runbook and milestone are
   `docs/runbooks/sc4-system-identification.md` and
   `docs/milestones/sc4-system-identification-v0.1.md`.
+- **D3.11 guarded intervention tooling complete:**
+  `tools/sc4_tax_intervention.py` provides a dry-run by default and an
+  explicitly acknowledged, narrowly scoped native tax-setter operation. It
+  resolves the budget object per session, restricts indices/rates, reads back
+  all twelve fields, and never writes raw memory or saves. No category mapping
+  or tax formula is claimed.
 - **D4 later:** POWER_001 through POWER_004 reference corpus, then held-out
   candidate evaluation.
 
