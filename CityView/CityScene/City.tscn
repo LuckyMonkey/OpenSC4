@@ -50,6 +50,7 @@ uniform float beach_wave_str = 10.0;
 uniform float beach_wave_threshold = 0.9;
 uniform float open_wave_str = 20.0;
 uniform float open_wave_threshold = 0.95;
+uniform bool fast_mode = false;
 varying float noise_height;
 
 uniform sampler2DArray watertexture : source_color;
@@ -81,18 +82,25 @@ vec4 noise_values(vec2 coords, int oct){
 void vertex(){
 	coord = VERTEX.xz;
 	noise_height = 0.0;
-	n_val1 = noise_values(coord, 0);
-	noise_height += (pow(texture(noise_texture, mod(n_val1.rg/1024.0, 1.0)).x, 2.0) * n_val1.b);
-	n_val2 = noise_values(coord, 1);
-	noise_height -= (pow(texture(noise_texture, mod(n_val2.gr/1024.0, 1.0)).x, 2.0) * n_val2.b);
-	n_val3 = noise_values(coord, 2);
-	noise_height -= (pow(texture(noise_texture, mod(n_val3.rg/1024.0, 1.0)).x, 2.0) * n_val3.b);
-	noise_height = 2.0 * (noise_height / (n_val1.b + n_val2.b + n_val3.b)) - 1.0;
-	VERTEX.y += noise_height*wave_height_scale;
+	if (!fast_mode) {
+		n_val1 = noise_values(coord, 0);
+		noise_height += (pow(texture(noise_texture, mod(n_val1.rg/1024.0, 1.0)).x, 2.0) * n_val1.b);
+		n_val2 = noise_values(coord, 1);
+		noise_height -= (pow(texture(noise_texture, mod(n_val2.gr/1024.0, 1.0)).x, 2.0) * n_val2.b);
+		n_val3 = noise_values(coord, 2);
+		noise_height -= (pow(texture(noise_texture, mod(n_val3.rg/1024.0, 1.0)).x, 2.0) * n_val3.b);
+		noise_height = 2.0 * (noise_height / (n_val1.b + n_val2.b + n_val3.b)) - 1.0;
+		VERTEX.y += noise_height*wave_height_scale;
+	}
 
 }
 
 void fragment(){
+	if (fast_mode) {
+		float fast_zoom_ind = min(float(zoom-1), 4.0);
+		ALBEDO = texture(watertexture, vec3(vec2(0.0, 0.0), fast_zoom_ind)).rgb;
+		ALPHA = 1.0;
+	} else {
 
 	float depth = texture(depth_texture, SCREEN_UV).r;
 	vec3 ndc = vec3(SCREEN_UV * 2.0 - 1.0, depth);
@@ -134,6 +142,7 @@ void fragment(){
 	ALBEDO = texture(watertexture, vec3(vec2(0.0, 0.0), float(zoom_ind))).rgb + break_col;
 	ALPHA = sqrt(depth_alpha);
 	//ALBEDO = vec3(normalize(noisenormal))*.5+.5;
+	}
 }"
 
 [sub_resource type="ShaderMaterial" id="10"]
@@ -152,6 +161,7 @@ shader_parameter/beach_wave_str = 70.0
 shader_parameter/beach_wave_threshold = 0.372
 shader_parameter/open_wave_str = 50.0
 shader_parameter/open_wave_threshold = 0.348
+shader_parameter/fast_mode = false
 shader_parameter/zoom = null
 shader_parameter/tiling_factor = null
 shader_parameter/max_depth = null
@@ -264,6 +274,7 @@ void fragment()
 		}
 	}
 	float sum_str = layer_w_0 + layer_w_1 + layer_w_2;
+	sum_str = max(sum_str, 0.0001);
 	vec3 col1 = (texture(terrain, vec3(UV.x*tiling_factor, UV.y*tiling_factor, float(zoom_ind)+layer_i_0)).rgb * (1.0 - beach_str) + (beach_str * beach_col)) * (layer_w_0/sum_str);
 	vec3 col2 = (texture(terrain, vec3(UV.x*tiling_factor, UV.y*tiling_factor, float(zoom_ind)+layer_i_1)).rgb * (1.0 - beach_str) + (beach_str * beach_col)) * (layer_w_1/sum_str);
 	vec3 col3 = (texture(terrain, vec3(UV.x*tiling_factor, UV.y*tiling_factor, float(zoom_ind)+layer_i_2)).rgb * (1.0 - beach_str) + (beach_str * beach_col)) * (layer_w_2/sum_str);

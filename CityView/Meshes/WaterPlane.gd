@@ -117,10 +117,13 @@ func generate_wateredges(HeightMap):
         for h in range(len(HeightMap[0])):
             var i = h * len(HeightMap)
             var j = (i + w)*4
+            # Preserve the source RGBA8 pixel instead of indexing backwards
+            # through the previous pixel's channels. The old form also read
+            # negative indices for the first pixel.
             watermap_inv.append(watermap[j])
-            watermap_inv.append(watermap[j-1])
-            watermap_inv.append(watermap[j-2])
-            watermap_inv.append(watermap[j-3])
+            watermap_inv.append(watermap[j + 1])
+            watermap_inv.append(watermap[j + 2])
+            watermap_inv.append(watermap[j + 3])
     
     var shoreimg = Image.create_from_data(len(HeightMap), len(HeightMap[0]), false, Image.FORMAT_RGBA8, watermap_inv)
     #shoreimg.flip_x()
@@ -133,6 +136,7 @@ func generate_wateredges(HeightMap):
     mat.set_shader_parameter("max_depth", max_depth_water_alpha)
     mat.set_shader_parameter("noise_texture", $NoiseTexture.texture)
     mat.set_shader_parameter("noise_normals", $NoiseNormals.texture)
+    mat.set_shader_parameter("fast_mode", Core.fast_water_enabled())
     self.set_material_override(mat)
     var matT = self.get_parent().get_node("Terrain").get_material_override()
     matT.set_shader_parameter("watermap", shoretex)

@@ -1538,8 +1538,10 @@ func set_building_view(cam_zoom : int, rotated : int, free_rot : int = -1):
 # Terrain altitude (world units) at tile coordinate (x, z), matching create_terrain's
 # heightmap[z][x] convention; clamps to the map edges.
 func _height_at(x : float, z : float) -> float:
+    if self.height_map.is_empty():
+        return 0.0
     var iz = clamp(int(z), 0, self.height_map.size() - 1)
-    if self.height_map.is_empty() or self.height_map[iz].is_empty():
+    if self.height_map[iz].is_empty():
         return 0.0
     var ix = clamp(int(x), 0, self.height_map[iz].size() - 1)
     return self.height_map[iz][ix] / TILE_SIZE

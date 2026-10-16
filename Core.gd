@@ -27,6 +27,16 @@ var sub_by_type_and_group : Dictionary
 var dbpf_files: Dictionary
 var game_dir = null
 
+# Runtime diagnostics are opt-in so normal launches preserve the intended
+# appearance. Environment variables are convenient for repeatable benchmarks;
+# command-line flags are convenient when launching from a desktop shortcut.
+func has_runtime_flag(flag : String) -> bool:
+    return OS.get_cmdline_args().has(flag) or OS.get_cmdline_user_args().has(flag)
+
+func fast_water_enabled() -> bool:
+    return has_runtime_flag("--sc4-fast-water") \
+        or OS.get_environment("OPENSC4_FAST_WATER") == "1"
+
 var type_dict_to_text = {
     0x6534284a: "exemplar",
     0x2026960b: "LTEXT",

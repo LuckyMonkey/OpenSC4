@@ -46,6 +46,24 @@ Godot clone of SimCity4
 - [ ] Multiplayer integration
 - [ ] Modding
 
+## Developer documentation
+
+- [Project status](docs/project-status.md)
+- [Roadmap and milestones](docs/roadmap.md)
+- [Architecture and simulation seams](docs/architecture.md)
+- [Edge-case matrix](docs/edge-cases.md)
+- [Behavioral compatibility lab](docs/simulation-lab.md)
+- [Baseline runbook](docs/runbooks/baseline.md)
+- [Performance runbook](docs/runbooks/performance.md)
+- [Reference-lab runbook](docs/runbooks/reference-lab.md)
+- [OpenGlassBox bridge runbook](docs/runbooks/openglassbox-bridge.md)
+
+Quick local baseline:
+
+```sh
+bash tools/run_baseline.sh
+```
+
 ## License
 
 GNU Affero General Public License v3.0 or later — see `LICENSE`.
