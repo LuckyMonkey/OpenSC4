@@ -105,6 +105,24 @@ runtime loading.
 6. Write the result as a behavioral observation in the lab schema. Never put
    an absolute pointer or raw proprietary bytes into a committed fixture.
 
+## Controlled tax-path investigation
+
+For the exact executable hash recorded in the tax-path milestone, the budget
+object's live vtable resolved a tax getter at `+0x90` and setter at `+0x94`.
+The getter indexes twelve floats at `this+0x70+index*0x80`; the setter checks
+only the upper bound (`index < 12`). This was established from native
+instructions and then verified against a live process. It is not a portable
+address map.
+
+If a user explicitly requests a temporary in-process tax experiment, rediscover
+the object pointer from the current process global, verify the executable hash,
+call only the proven setter with indices `0..11`, and read the fields back.
+Never add a generic arbitrary-memory writer to the observatory, never use a
+negative index, and never treat a changed UI cache as proof that tax income was
+recalculated. Record the experiment as runtime metadata outside Git. The full
+result and formula boundary are in
+`docs/milestones/sc4-tax-distillation-v0.1.md`.
+
 ## First milestones
 
 1. **REA connected**: both doctors healthy and Codex sees the REA tools.

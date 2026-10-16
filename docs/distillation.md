@@ -178,6 +178,12 @@ subsystem and retain failed experiments as useful evidence.
   exact target identity, 57 categorized leads, REA evidence IDs, runtime
   prerequisites, and the interpretation/data boundary into a private local
   artifact. It intentionally exports metadata, not proprietary bytes.
+- **D3.8 tax path distillation partial:** instruction tracing and live vtable
+  resolution proved the twelve tax-rate fields, getter, bounded setter, tax
+  income result field, and the rate-bearing multiplication boundary. The full
+  taxable-base formula and a complete budget-update observation remain open.
+  The independently authored record is
+  `docs/milestones/sc4-tax-distillation-v0.1.md`.
 - **D4 later:** POWER_001 through POWER_004 reference corpus, then held-out
   candidate evaluation.
 

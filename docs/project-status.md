@@ -29,6 +29,7 @@ claim.
 | Static candidate ledger | Implemented, unverified | 185 named-string candidates + code references |
 | Private SC4 evidence pack | Implemented, static-only | Target manifest + 57 categorized leads; runtime input pending |
 | Live SC4 hashed capture | First runtime milestone | 859 launch regions, 913 city regions, 143 transition changes |
+| SC4 tax path | First native distillation milestone | Proven rate storage/getter/setter and tax-income writer boundary; full taxable-base formula pending |
 
 ## Current strengths
 
@@ -71,8 +72,13 @@ claim.
   is verified until a live process survives controlled change, reload, and
   restart checks.
 - A real Steam-launched city session now supplies metadata-only hashed
-  snapshots and transition diffs. This is process-observation progress, not a
-  decoded treasury/date/power field.
+  snapshots and transition diffs. A separate local GDB investigation has now
+  decoded the SC4 tax-rate object layout and the tax-income writer boundary;
+  this is not a decoded treasury/date/power field.
+- The live tax-rate setter was invoked only after its vtable target and bounds
+  behavior were proven. All twelve rates were temporarily raised from `9.0`
+  to `20.0` in process memory; no executable or save was changed. See
+  `docs/milestones/sc4-tax-distillation-v0.1.md`.
 - OpenGlassBox has its own simulation concepts and a dual GPL/commercial
   licensing policy; dependency review is required before distribution.
 
