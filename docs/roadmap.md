@@ -131,6 +131,15 @@ limits into a local-only artifact. The current pack retains 57 leads, including
 the visible treasury/date/population names. It does not write raw executable,
 memory, save, or extracted-resource data and refuses repository output paths.
 
+### D3.8: first live city capture (done, value decoding pending)
+
+Steam AppID 24780 now launches the exact LAA target under Proton Experimental.
+The observatory captured 859 hashed regions at launch, 913 after city load,
+143 changed regions across that transition, and 92 further changes during an
+eight-second running interval. The next gate is a typed scan driven by one
+visible treasury/date/population value, followed by save/reload and restart
+validation.
+
 ### D4: power corpus (next after D3)
 
 Run one plant, altered demand, funding changes, and two-plant cases. Record

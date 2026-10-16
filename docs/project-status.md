@@ -28,6 +28,7 @@ claim.
 | REA integration | Connected, Ghidra healthy, bridge timeout | Codex MCP/skill aligned; native queries bounded |
 | Static candidate ledger | Implemented, unverified | 185 named-string candidates + code references |
 | Private SC4 evidence pack | Implemented, static-only | Target manifest + 57 categorized leads; runtime input pending |
+| Live SC4 hashed capture | First runtime milestone | 859 launch regions, 913 city regions, 143 transition changes |
 
 ## Current strengths
 
@@ -59,8 +60,8 @@ claim.
   failure, but it can hide future failures.
 - There is no simulation state model, save migration policy, or adapter ABI.
 - The reference observation adapter and independent verifier are still absent.
-- Local capture tooling exists, but no live SC4 process or `.sc4` save was
-  available in the current workspace for a real reference run.
+- Local capture tooling exists and has completed a live metadata-only SC4 run;
+  no `.sc4` save or decoded city value has been added yet.
 - REA is connected for Codex, but the current session needs a restart and a
   native provider (preferably Ghidra) before function-level SC4 analysis.
 - Ghidra is now installed and healthy, but REA's native bridge times out on
@@ -69,6 +70,9 @@ claim.
 - The evidence pack organizes those leads for runtime follow-up, but no field
   is verified until a live process survives controlled change, reload, and
   restart checks.
+- A real Steam-launched city session now supplies metadata-only hashed
+  snapshots and transition diffs. This is process-observation progress, not a
+  decoded treasury/date/power field.
 - OpenGlassBox has its own simulation concepts and a dual GPL/commercial
   licensing policy; dependency review is required before distribution.
 

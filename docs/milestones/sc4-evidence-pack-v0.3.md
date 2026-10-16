@@ -51,3 +51,10 @@ LAA SHA-256. A read-only observatory capture recorded 859 hashed regions, with
 398 executable regions and `raw_bytes_recorded=false`. This proves process
 attachment and artifact identity only; no treasury, date, or power field is
 verified yet.
+
+The city was then loaded in the same process. The city snapshot contained 913
+hashed regions; 143 regions changed from the launch snapshot. During an
+additional eight-second running interval, 92 regions changed again. These
+counts establish that the observatory sees live city/simulation transitions,
+but they intentionally do not identify which regions contain authoritative
+game values.
