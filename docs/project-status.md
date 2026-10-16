@@ -25,6 +25,7 @@ claim.
 | Observation comparator | Implemented | `sc4-lab/verifier/compare.py`, policy separated |
 | Local reference capture | Implemented, awaiting SC4 input | Save hashes/deltas + user-owned process metadata |
 | Dynamic memory observatory | Implemented, awaiting SC4 input | Read-only scan/snapshot/watch tooling |
+| REA integration | Connected, native provider pending | Codex MCP/skill aligned; PE preflight completed |
 
 ## Current strengths
 
@@ -58,6 +59,8 @@ claim.
 - The reference observation adapter and independent verifier are still absent.
 - Local capture tooling exists, but no live SC4 process or `.sc4` save was
   available in the current workspace for a real reference run.
+- REA is connected for Codex, but the current session needs a restart and a
+  native provider (preferably Ghidra) before function-level SC4 analysis.
 - OpenGlassBox has its own simulation concepts and a dual GPL/commercial
   licensing policy; dependency review is required before distribution.
 

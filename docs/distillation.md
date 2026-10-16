@@ -166,6 +166,10 @@ subsystem and retain failed experiments as useful evidence.
   process or `.sc4` save is currently available in the workspace.
 - **D3 tooling complete:** typed memory scans, hashed snapshots, address
   sampling, and a synthetic self-test are ready; no SC4 address is verified.
+- **D3.5 artifact preflight complete:** REA is connected to Codex, and its
+  provider-free PE parser has identified the available SC4 backups as complete
+  PE32/x86 artifacts. Native function analysis remains pending until a provider
+  is configured; this does not count as a simulation observation.
 - **D4 later:** POWER_001 through POWER_004 reference corpus, then held-out
   candidate evaluation.
 

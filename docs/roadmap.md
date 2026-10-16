@@ -99,6 +99,22 @@ synthetic child process so far.
 Typed scans, hashed snapshots, and address sampling are ready. No SC4 address
 is verified until a live process is captured and validated across restarts.
 
+### D3.5: REA artifact preflight (done; native provider pending)
+
+REA 6.5.0 is connected to Codex through a user-owned MCP registration and its
+reverse-engineering skill is aligned. The provider-free PE resource inspection
+completed against the available SC4 backups and confirmed stable PE32/x86
+artifact identities. This is provenance only; it does not establish simulation
+logic. Restart Codex, configure Ghidra or another explicitly approved native
+provider, then open the exact manifest-selected executable.
+
+### D3.6: first native candidate ledger (next)
+
+Use REA to identify a save/load path, simulation-tick candidate, and one
+visible city-statistic path. Record addresses, callers, constants, evidence
+IDs, confidence, and unknowns. Correlate only one candidate at a time with the
+existing read-only memory and save-capture tools.
+
 ### D4: power corpus (next after D3)
 
 Run one plant, altered demand, funding changes, and two-plant cases. Record
