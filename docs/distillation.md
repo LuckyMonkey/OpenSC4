@@ -33,6 +33,21 @@ behavior from:
 Screenshots are useful for visual review, but they are weak evidence for exact
 arithmetic. A screenshot-only claim is always marked approximate or unsupported.
 
+## Observation depth ladder
+
+Use the least invasive source that can answer the question:
+
+1. structured game/UI output and controlled input logs;
+2. save-file metadata, hashes, and changed chunk ranges;
+3. existing parser-visible subfile values from a user-owned local save;
+4. process status and mapped-region metadata for a user-owned process;
+5. raw memory/core analysis only as a separately reviewed local experiment.
+
+The repository may contain the tool and methodology for these levels, but not
+raw saves, memory dumps, or extracted proprietary bytes. Save deltas identify
+where to investigate; they do not establish the meaning of a field by
+themselves.
+
 ## Roles and separation
 
 The lab keeps four responsibilities separate:
@@ -146,8 +161,9 @@ subsystem and retain failed experiments as useful evidence.
   JSON-line adapter protocol.
 - **D1 complete:** data-free protocol adapter, recorder, and comparator
   fixtures. These prove the laboratory machinery only; they are not SC4 data.
-- **D2 next:** capability inventory for driving and observing the local SC4
-  reference without bypassing access controls or committing game data.
+- **D2 tooling complete:** local save/process capture tooling is ready; the
+  capability inventory and first real SC4 capture remain open because no live
+  process or `.sc4` save is currently available in the workspace.
 - **D3 later:** POWER_001 through POWER_004 reference corpus, then held-out
   candidate evaluation.
 

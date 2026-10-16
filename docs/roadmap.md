@@ -81,11 +81,14 @@ not crash loading, and UI remains visible at 16:9, 21:9, and 32:9 sizes.
 
 The data-free `sc4-lab/` layout and scenario contract exist.
 
-### D2: reference observation path (blocked on capability, not design)
+### D2: reference observation path (capture tooling done; live input needed)
 
 Identify an allowed, repeatable way to apply controlled inputs and observe
 structured power metrics in the local SC4 installation. If a metric cannot be
 observed reliably, mark it unsupported instead of estimating it from pixels.
+
+Local save/process metadata capture and changed-range reports are implemented;
+the first real run still needs a user-owned `.sc4` save and live process.
 
 ### D3: power corpus (next after D2)
 

@@ -41,6 +41,44 @@ This proves only JSON envelopes, command validation, event cursors,
 save/load, and observation recording. It does not run SC4 or create reference
 results.
 
+## Capture a local SC4 save transition
+
+Use the metadata capture tool around one controlled action, such as changing a
+budget slider and saving. It records hashes and changed fixed-size chunk ranges,
+never the original save bytes:
+
+```sh
+python3 tools/reference_capture.py snapshot \
+    --save "/path/to/user-owned/Regions/Region/City - Test.sc4" \
+    --phase before-action --out /tmp/sc4-before.json
+
+# Perform exactly one action in SC4, save, and close/save again.
+
+python3 tools/reference_capture.py snapshot \
+    --save "/path/to/user-owned/Regions/Region/City - Test.sc4" \
+    --phase after-action --out /tmp/sc4-after.json
+python3 tools/reference_capture.py diff \
+    --before /tmp/sc4-before.json --after /tmp/sc4-after.json \
+    --out /tmp/sc4-save-diff.json
+```
+
+For a live user-owned process, add `--pid PID --include-maps` to capture
+process status and mapped-region metadata. This tool deliberately does not
+read `/proc/PID/mem` or create a raw memory dump. Escalate to OS core-dump
+tooling only as a separately reviewed, local-only experiment.
+
+To watch for saves during a short manual experiment:
+
+```sh
+python3 tools/reference_capture.py watch \
+    --save "/path/to/user-owned/Regions/Region/City - Test.sc4" \
+    --duration 120 --interval 1 --out /tmp/sc4-watch.jsonl
+```
+
+Treat changed ranges as leads, not decoded game logic. Correlate them with
+structured parser observations and repeated controlled actions before writing a
+behavioral specification.
+
 ## First power corpus
 
 The minimum useful sequence is:

@@ -23,6 +23,7 @@ claim.
 | Data boundary gate | Implemented | `tools/check_data_boundary.sh` |
 | Simulation events/protocol | Implemented | Event cursors + JSON-line adapter contract |
 | Observation comparator | Implemented | `sc4-lab/verifier/compare.py`, policy separated |
+| Local reference capture | Implemented, awaiting SC4 input | Save hashes/deltas + user-owned process metadata |
 
 ## Current strengths
 
@@ -54,6 +55,8 @@ claim.
   failure, but it can hide future failures.
 - There is no simulation state model, save migration policy, or adapter ABI.
 - The reference observation adapter and independent verifier are still absent.
+- Local capture tooling exists, but no live SC4 process or `.sc4` save was
+  available in the current workspace for a real reference run.
 - OpenGlassBox has its own simulation concepts and a dual GPL/commercial
   licensing policy; dependency review is required before distribution.
 
