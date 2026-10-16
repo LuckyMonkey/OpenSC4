@@ -33,6 +33,9 @@ directory. It never copies SC4 files there.
 
 The Xvfb screenshot subprocess uses `LIBGL_ALWAYS_SOFTWARE=1` for repeatable
 CI-style captures. This is separate from the real RTX/X11 performance test.
+For headless environments where screenshots are intentionally out of scope,
+use `SC4_SKIP_SCREENSHOT=1`; the import, parser, backend, and city checks still
+run.
 
 The current harness can still report ObjectDB/resource leak warnings during
 Godot shutdown after a successful sweep. Track those separately from load

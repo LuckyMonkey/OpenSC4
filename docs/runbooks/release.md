@@ -5,6 +5,7 @@ Before pushing a change:
 ```sh
 git diff --check
 godot --headless --path . --import
+bash tools/check_data_boundary.sh
 bash tools/run_baseline.sh /tmp/opensc4-release-check
 ```
 
@@ -17,6 +18,8 @@ Confirm that:
   ownership are documented;
 - screenshots and logs containing game content remain outside Git;
 - the commit describes what was verified and what remains untested.
+- the baseline `manifest.txt` records the commit and test profile used for the
+  release check.
 
 If a test needs the user's installation, document the exact local command and
 expected result instead of adding the installation to CI.

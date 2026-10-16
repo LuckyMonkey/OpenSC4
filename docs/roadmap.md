@@ -11,11 +11,15 @@ track must not block the others.
 Run import, city loading, the full view sweep, and optional screenshots from one
 command. Preserve logs and output paths.
 
-### A2: deterministic artifact manifest (next)
+### A2: deterministic artifact manifest (done)
 
 Record Git commit, Godot version, renderer, display size, GPU driver, SC4 game
 directory hash metadata (not game files), city name, and elapsed times. Never
 hash or copy proprietary data into the repository.
+
+The baseline now writes `opensc4.baseline.v1` metadata and the data-boundary
+gate rejects tracked game archives and reference outputs. Host GPU-driver
+identification remains a follow-up because it must not capture game contents.
 
 ### A3: held-out rendering corpus
 
@@ -114,6 +118,19 @@ Do not vendor a large source snapshot into the Godot project.
 
 Add compatibility behavior behind the same interface only after reference
 observations exist.
+
+## Track F — project hygiene
+
+### F1: reproducible milestone package (done)
+
+Baseline manifests, a tracked-data boundary check, an iteration/sync runbook,
+and a future-work wishlist are committed in
+`docs/milestones/lab-baseline-v0.2.md`.
+
+### F2: held-out experiment reporting (next)
+
+Add immutable local manifests and a comparator report format without committing
+original saves, extracted assets, or unreviewed reference dumps.
 
 ## Edge-problem exit criteria
 

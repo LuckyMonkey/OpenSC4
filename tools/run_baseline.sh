@@ -11,10 +11,25 @@ REGION="${2:-Timbuktu}"
 CITY="${3:-Big City Tutorial}"
 SCREEN_WIDTH="${SC4_SCREEN_WIDTH:-1600}"
 SCREEN_HEIGHT="${SC4_SCREEN_HEIGHT:-900}"
+GIT_COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD)"
+GIT_BRANCH="$(git -C "$ROOT_DIR" branch --show-current)"
+GIT_DIRTY_FILES="$(git -C "$ROOT_DIR" status --porcelain | wc -l | tr -d ' ')"
+GODOT_VERSION="$("$GODOT_BIN" --version 2>&1 | head -n 1)"
+RENDERER_PROFILE="${SC4_RENDERER_PROFILE:-default}"
+FAST_WATER="${OPENSC4_FAST_WATER:-0}"
+SPATIAL_BATCHES="${OPENSC4_SPATIAL_BATCHES:-0}"
+VIEW_BATCH_CACHE="${OPENSC4_CACHE_VIEW_BATCHES:-0}"
 
 mkdir -p "$OUT_DIR"
-printf 'OpenSC4 baseline\nroot=%s\noutput=%s\nregion=%s\ncity=%s\n' \
-    "$ROOT_DIR" "$OUT_DIR" "$REGION" "$CITY" | tee "$OUT_DIR/manifest.txt"
+printf 'schema=opensc4.baseline.v1\ncommit=%s\nbranch=%s\ngit_dirty_files=%s\n' \
+    "$GIT_COMMIT" "$GIT_BRANCH" "$GIT_DIRTY_FILES" >"$OUT_DIR/manifest.txt"
+printf 'godot_version=%s\nrenderer_profile=%s\nscreen=%sx%s\n' \
+    "$GODOT_VERSION" "$RENDERER_PROFILE" "$SCREEN_WIDTH" "$SCREEN_HEIGHT" \
+    >>"$OUT_DIR/manifest.txt"
+printf 'fast_water=%s\nspatial_batches=%s\nview_batch_cache=%s\n' \
+    "$FAST_WATER" "$SPATIAL_BATCHES" "$VIEW_BATCH_CACHE" >>"$OUT_DIR/manifest.txt"
+printf 'region=%s\ncity=%s\nreference_data=local-only\noutput=%s\n' \
+    "$REGION" "$CITY" "$OUT_DIR" | tee -a "$OUT_DIR/manifest.txt"
 
 echo "[1/5] Godot import"
 "$GODOT_BIN" --headless --path "$ROOT_DIR" --import \
@@ -42,7 +57,10 @@ if grep -Eq "SCRIPT ERROR|SHADER ERROR|Shader compilation failed" "$OUT_DIR/city
     exit 1
 fi
 
-if command -v xvfb-run >/dev/null 2>&1; then
+if [ "${SC4_SKIP_SCREENSHOT:-0}" = "1" ]; then
+    echo "[5/5] Screenshot harness skipped (SC4_SKIP_SCREENSHOT=1)" \
+        | tee "$OUT_DIR/screenshot.log"
+elif command -v xvfb-run >/dev/null 2>&1; then
     echo "[5/5] Screenshot harness"
     mkdir -p "$OUT_DIR/screenshots"
     run_screenshot_harness() {

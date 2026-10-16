@@ -19,6 +19,8 @@ claim.
 | Parser fixture smoke | Implemented | Synthetic malformed-record and UI-bound tests |
 | Spatial batching | Opt-in experiment | `OPENSC4_SPATIAL_BATCHES=1` |
 | View-batch cache | Measured, opt-in | `OPENSC4_CACHE_VIEW_BATCHES=1`, two-view LRU |
+| Baseline artifact manifest | Implemented | `opensc4.baseline.v1` in each run output |
+| Data boundary gate | Implemented | `tools/check_data_boundary.sh` |
 
 ## Current strengths
 
@@ -32,6 +34,8 @@ claim.
   implementation work.
 - A renderer-independent backend contract and deterministic synthetic power
   backend now exercise clocking, supply/demand, snapshots, and save/load.
+- Baseline outputs now carry reproducibility metadata without recording local
+  game paths or game contents.
 
 ## Known risks
 
@@ -45,6 +49,7 @@ claim.
   the harness has completed. This is a cleanup issue, not currently a load
   failure, but it can hide future failures.
 - There is no simulation state model, save migration policy, or adapter ABI.
+- The reference observation adapter and independent verifier are still absent.
 - OpenGlassBox has its own simulation concepts and a dual GPL/commercial
   licensing policy; dependency review is required before distribution.
 

@@ -57,11 +57,20 @@ Godot clone of SimCity4
 - [Performance runbook](docs/runbooks/performance.md)
 - [Reference-lab runbook](docs/runbooks/reference-lab.md)
 - [OpenGlassBox bridge runbook](docs/runbooks/openglassbox-bridge.md)
+- [Development iteration and Git sync](docs/runbooks/iteration.md)
+- [Future work and wishlist](docs/future-work.md)
+- [Baseline milestone report](docs/milestones/lab-baseline-v0.2.md)
 
 Quick local baseline:
 
 ```sh
 bash tools/run_baseline.sh
+```
+
+Release/data-boundary check:
+
+```sh
+bash tools/check_data_boundary.sh
 ```
 
 ## License
