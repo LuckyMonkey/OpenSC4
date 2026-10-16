@@ -108,12 +108,20 @@ artifact identities. This is provenance only; it does not establish simulation
 logic. Restart Codex, configure Ghidra or another explicitly approved native
 provider, then open the exact manifest-selected executable.
 
-### D3.6: first native candidate ledger (next)
+### D3.6: first native candidate ledger (partial)
 
 Use REA to identify a save/load path, simulation-tick candidate, and one
 visible city-statistic path. Record addresses, callers, constants, evidence
 IDs, confidence, and unknowns. Correlate only one candidate at a time with the
 existing read-only memory and save-capture tools.
+
+The provider is healthy, but three REA native operations currently hit the
+330-second Ghidra bridge timeout on the legacy PE. The bounded fallback ledger
+now records 178 named-string candidates and static references. Strong leads are
+`g_power_plant_count` at `0x0042107d`, `g_power_consumed` at `0x00422152`,
+`SimulationClock` at `0x005c9f42`, `GetSimulationDate` at `0x007032ce`, and
+`LoadCity` at `0x007b217f`. These remain unverified until a function dossier or
+runtime/save correlation exists.
 
 ### D4: power corpus (next after D3)
 

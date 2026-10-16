@@ -11,9 +11,9 @@ outputs private unless they are independently written observations.
 - Current machine: Wine, `winedbg`, and GDB are present.
 - REA 6.5.0 is connected to Codex and skill version 42 is installed/aligned.
   Restart Codex before expecting the MCP tools in this already-running session.
-- Native provider: not configured yet. Hopper was deliberately skipped because
-  its setup is a system package installation; Ghidra is the preferred next
-  provider.
+- Native provider: Ghidra 12.1.4 + Temurin JDK 21.0.12 are configured in the
+  user-local REA environment. Hopper was deliberately skipped because its
+  setup is a system package installation.
 - System Node remains `18.19.1`; user-local fnm provides Node `24.22.0` for
   REA. Current REA setup requires Node 22.19+, 24.11+, or 26+.
 - No live SC4 process or `.sc4` save is present in the workspace, so runtime
@@ -134,3 +134,25 @@ npx -y rea-agents@latest function \
 
 Replace the address with a candidate returned by the analysis. Keep the JSON
 result local; commit only a concise, independently authored interpretation.
+
+## REA/Ghidra timeout fallback
+
+The current LAA backup is a legacy PE32 image with stripped symbols, no local
+PDB, and missing Windows import libraries. REA's Ghidra provider was healthy,
+but its `analyze`, `search`, and focused `function` operations each reached the
+330-second bridge timeout while this target was being enumerated. Preserve that
+failure as a provider limitation; do not call it evidence that the target has
+no functions.
+
+For a bounded interim ledger, run the repository fallback locally:
+
+```bash
+python3 tools/sc4_static_candidates.py \
+  "/absolute/path/to/SimCity 4.exe" \
+  --out /tmp/opensc4-sc4-static-candidates.json
+```
+
+It records selected named strings, PE virtual addresses, and static `objdump`
+instruction references only. It does not establish function boundaries,
+calling conventions, authoritative state, or runtime writes. Use it to choose
+the next REA/Ghidra address, not as a substitute for REA evidence.

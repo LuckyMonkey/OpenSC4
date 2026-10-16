@@ -170,6 +170,10 @@ subsystem and retain failed experiments as useful evidence.
   provider-free PE parser has identified the available SC4 backups as complete
   PE32/x86 artifacts. Native function analysis remains pending until a provider
   is configured; this does not count as a simulation observation.
+- **D3.6 candidate ledger partial:** Ghidra is healthy, but REA's native bridge
+  times out on this legacy PE. A local metadata-only fallback found 178 named
+  candidates and static references for power, water, city statistics, date,
+  and load paths. None are verified simulation state or writers.
 - **D4 later:** POWER_001 through POWER_004 reference corpus, then held-out
   candidate evaluation.
 

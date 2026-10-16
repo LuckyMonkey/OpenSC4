@@ -25,7 +25,8 @@ claim.
 | Observation comparator | Implemented | `sc4-lab/verifier/compare.py`, policy separated |
 | Local reference capture | Implemented, awaiting SC4 input | Save hashes/deltas + user-owned process metadata |
 | Dynamic memory observatory | Implemented, awaiting SC4 input | Read-only scan/snapshot/watch tooling |
-| REA integration | Connected, native provider pending | Codex MCP/skill aligned; PE preflight completed |
+| REA integration | Connected, Ghidra healthy, bridge timeout | Codex MCP/skill aligned; native queries bounded |
+| Static candidate ledger | Implemented, unverified | 178 named-string candidates + code references |
 
 ## Current strengths
 
@@ -61,6 +62,9 @@ claim.
   available in the current workspace for a real reference run.
 - REA is connected for Codex, but the current session needs a restart and a
   native provider (preferably Ghidra) before function-level SC4 analysis.
+- Ghidra is now installed and healthy, but REA's native bridge times out on
+  this legacy PE; the local candidate ledger preserves leads without claiming
+  function boundaries or runtime authority.
 - OpenGlassBox has its own simulation concepts and a dual GPL/commercial
   licensing policy; dependency review is required before distribution.
 
