@@ -6,6 +6,7 @@ var font = null
 var default_font_size = ThemeDB.fallback_font_size
 
 func _init(attributes):
+    super._init(attributes)
     # hack to get the default font while we can't decode the Simcity 4 ones
     var label = Label.new()
     self.font = label.get_theme_font("font")

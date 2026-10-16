@@ -20,6 +20,7 @@ class_name GZWinBMP
 var texture : Texture2D = null
 
 func _init(attributes):
+    super._init(attributes)
     if not 'image' in attributes:
         print(attributes)
     else:
@@ -34,4 +35,4 @@ func set_texture(texture : Texture2D):
 
 func _draw():
     if self.texture != null:
-        draw_texture(texture, get_position())
+        draw_texture(texture, Vector2())

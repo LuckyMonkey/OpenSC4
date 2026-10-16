@@ -41,6 +41,7 @@ var is_checked : bool = false
 var is_disabled : bool = false
 
 func _init(attributes : Dictionary):
+    super._init(attributes)
     var style = attributes.get('style', 'standard')
     match style:
         "standard":
@@ -102,6 +103,7 @@ func _gui_input(event):
         return
     if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
         if event.pressed:
+            get_viewport().set_input_as_handled()
             is_pressed = true
             if self.style == ButtonStyle.RADIOCHECK:
                 is_checked = not is_checked

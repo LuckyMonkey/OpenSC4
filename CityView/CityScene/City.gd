@@ -795,12 +795,14 @@ func load_props():
     var pindex = savefile.indices_by_type.get(0x2977aa47, [])
     if pindex.is_empty():
         Log.info("City has no prop subfile")
+        load_flora()
         return
     var idx = pindex[0]
     var psub = savefile.get_subfile(idx.type_id, idx.group_id, idx.instance_id, PropSubfile)
     Log.info("Prop subfile: %d records" % psub.records.size())
-    _place_occupants(psub.records, "props")
+    _place_occupants(psub.records, "props", false)
     load_flora()
+    _rebuild_batched_occupants()
 
 # Reads the city's Flora occupant subfile (god/mayor-mode trees; lot trees are
 # props) and renders it through the same pipeline.
@@ -812,7 +814,7 @@ func load_flora():
     var idx = findex[0]
     var fsub = savefile.get_subfile(idx.type_id, idx.group_id, idx.instance_id, FloraSubfile)
     Log.info("Flora subfile: %d records" % fsub.records.size())
-    _place_occupants(fsub.records, "flora")
+    _place_occupants(fsub.records, "flora", false)
     load_power_lines()
     load_lot_structures()
 
@@ -1046,7 +1048,7 @@ func _draw_power_spans(sub : PowerLineSubfile):
 # need exemplar_tgi, pos_x, pos_z and orientation. The occupant's own world
 # orientation is folded into which S3D rotation variant is displayed (rotating
 # the impostor mesh itself would break the fixed-camera illusion).
-func _place_occupants(recs : Array, what : String):
+func _place_occupants(recs : Array, what : String, rebuild_batch : bool = true):
     var placed = 0
     var sprites = 0
     var no_model = 0
@@ -1072,6 +1074,9 @@ func _place_occupants(recs : Array, what : String):
                 "orientation": rec.orientation,
                 "pos_x": rec.pos_x,
                 "pos_z": rec.pos_z,
+                "position": Vector3(rec.pos_x / TILE_SIZE,
+                    _height_at(rec.pos_x / TILE_SIZE, rec.pos_z / TILE_SIZE),
+                    rec.pos_z / TILE_SIZE),
             })
             placed += 1
             continue
@@ -1086,7 +1091,7 @@ func _place_occupants(recs : Array, what : String):
         mi.position = Vector3(x, _height_at(x, z), z)
         building_root.add_child(mi)
         placed += 1
-    if can_batch:
+    if can_batch and rebuild_batch:
         _rebuild_batched_occupants()
     Log.info("Placed %d %s, %d as 2D sprites (%d without a resolvable model)"
         % [placed, what, sprites, no_model])
@@ -1181,21 +1186,28 @@ func _rebuild_batched_occupants():
         child.free()
 
     var groups = {}
+    var resolved_models = {}
     for entry in batched_occupants:
         var ref = entry["ref"]
         var vrot = posmod(current_s3d_rot + ROT_SIGN * entry["orientation"], 4)
-        var model = _resolve_model(ref, current_s3d_zoom, vrot)
+        var tgi = ref["tgi"]
+        var model_key = "%s|%d|%d" % [
+            SubfileTGI.TGI2str(tgi[0], tgi[1], tgi[2]), current_s3d_zoom, vrot]
+        var model
+        if resolved_models.has(model_key):
+            model = resolved_models[model_key]
+        else:
+            model = _resolve_model(ref, current_s3d_zoom, vrot)
+            resolved_models[model_key] = model
         if model == null:
             continue
         var angle = current_rot_comp if ref["prop_key"] == RKT1_PROP else 0.0
         var key = "%d|%.6f" % [model["mesh"].get_instance_id(), angle]
         if not groups.has(key):
             groups[key] = {"mesh": model["mesh"], "angle": angle, "transforms": []}
-        var x = entry["pos_x"] / TILE_SIZE
-        var z = entry["pos_z"] / TILE_SIZE
+        var position : Vector3 = entry["position"]
         var basis = Basis().rotated(Vector3.UP, angle)
-        groups[key]["transforms"].append(
-            Transform3D(basis, Vector3(x, _height_at(x, z), z)))
+        groups[key]["transforms"].append(Transform3D(basis, position))
 
     for group in groups.values():
         var multimesh = MultiMesh.new()

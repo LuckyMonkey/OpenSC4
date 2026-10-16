@@ -26,10 +26,12 @@ var vec2Regex : RegEx = RegEx.new()
 var elementsByID : Dictionary = {}
 var lines : Array = []
 
-# SC4's legacy UI layouts are authored for an 800x600 canvas. Keep that
-# coordinate system intact and place it at the bottom-left of the real
-# viewport, rather than stretching it across an ultrawide window.
+# Keep SC4's legacy coordinate system intact and place it at the bottom-left of
+# the real viewport, rather than stretching it across an ultrawide window.
+# Some shipped UI subfiles use a wider 1154px canvas despite the historical
+# 800x600 name, so the actual layout bounds are measured when loaded.
 const LEGACY_UI_SIZE := Vector2(800.0, 600.0)
+var legacy_ui_size := LEGACY_UI_SIZE
 
 func _init(index):
     rectRegex.compile("\\((?<x>-?\\d+),(?<y>-?\\d+),(?<width>-?\\d+),(?<height>-?\\d+)\\)")
@@ -71,9 +73,15 @@ func load(file, dbdf=null):
     lines = stream.get_string(stream.get_available_bytes()).split("\n")
 
 func add_to_tree(parent : Node, custom_classes : Dictionary):
+    legacy_ui_size = _layout_size()
     parent.add_child(self.root)
     root.set_anchors_preset(Control.PRESET_TOP_LEFT)
-    root.size = LEGACY_UI_SIZE
+    root.size = legacy_ui_size
+    root.clip_contents = true
+    root.z_index = 100
+    # The legacy root is a canvas, not a full-screen input shield. Let map
+    # clicks reach RegionGrid except where an actual UI child handles them.
+    root.mouse_filter = Control.MOUSE_FILTER_IGNORE
     root.get_viewport().size_changed.connect(_position_legacy_ui)
     _position_legacy_ui()
     var current_element : Control = self.root
@@ -102,8 +110,22 @@ func _position_legacy_ui():
     if not is_instance_valid(root) or not root.is_inside_tree():
         return
     var viewport_size = root.get_viewport_rect().size
-    root.position = Vector2(0.0, max(0.0, viewport_size.y - LEGACY_UI_SIZE.y))
-    root.size = LEGACY_UI_SIZE
+    root.position = Vector2(0.0, max(0.0, viewport_size.y - legacy_ui_size.y))
+    root.size = legacy_ui_size
+
+func _layout_size() -> Vector2:
+    var result := LEGACY_UI_SIZE
+    for line in lines:
+        var area_start = line.find("area=")
+        if area_start < 0:
+            continue
+        var match = rectRegex.search(line.substr(area_start + 5))
+        if match == null:
+            continue
+        var area = string2rect(match.get_string())
+        result.x = max(result.x, area.position.x + area.size.x)
+        result.y = max(result.y, area.position.y + area.size.y)
+    return result
 
 func create_element(attributes : Dictionary, custom_classes : Dictionary) -> Control:
     var type = attributes.get('iid', 'none')
