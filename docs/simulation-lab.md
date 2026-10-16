@@ -1,5 +1,9 @@
 # SC4 Behavioral Compatibility Lab
 
+The detailed experimental method is maintained in
+[`distillation.md`](distillation.md). This document remains the repository
+layout and compatibility-lab overview.
+
 This document defines the experimental boundary for reconstructing observable
 SimCity 4 behavior in OpenSC4. It is an engineering protocol, not a claim
 that OpenSC4 currently matches the original simulation.

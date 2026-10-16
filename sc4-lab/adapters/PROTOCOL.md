@@ -70,3 +70,7 @@ the named sampling event and backend tick/cursor metadata.
   verifier tolerances.
 
 The protocol is an integration seam, not proof that an adapter matches SC4.
+
+The data-free fixture under `adapters/mock/` is the first executable consumer.
+Use it to validate the transport before connecting an OpenGlassBox or local SC4
+adapter.

@@ -24,6 +24,23 @@ reason.
 8. Publish a report stating exact, tolerance, distribution, spatial, or
    unsupported comparison status.
 
+## Start with the data-free protocol fixture
+
+Before a local SC4 adapter exists, exercise the transport and recorder with
+the synthetic sidecar:
+
+```sh
+python3 tools/probe_adapter.py \
+    --adapter python3 sc4-lab/adapters/mock/synthetic_sidecar.py \
+    --scenario sc4-lab/adapters/mock/protocol_smoke.json \
+    --trace /tmp/opensc4-protocol-trace.jsonl \
+    --observation /tmp/opensc4-protocol-observation.json
+```
+
+This proves only JSON envelopes, command validation, event cursors,
+save/load, and observation recording. It does not run SC4 or create reference
+results.
+
 ## First power corpus
 
 The minimum useful sequence is:

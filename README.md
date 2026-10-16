@@ -53,6 +53,7 @@ Godot clone of SimCity4
 - [Architecture and simulation seams](docs/architecture.md)
 - [Edge-case matrix](docs/edge-cases.md)
 - [Behavioral compatibility lab](docs/simulation-lab.md)
+- [Behavioral distillation protocol](docs/distillation.md)
 - [Baseline runbook](docs/runbooks/baseline.md)
 - [Performance runbook](docs/runbooks/performance.md)
 - [Reference-lab runbook](docs/runbooks/reference-lab.md)
@@ -61,6 +62,7 @@ Godot clone of SimCity4
 - [Simulation backend seam](docs/runbooks/simulation-backend.md)
 - [Future work and wishlist](docs/future-work.md)
 - [Baseline milestone report](docs/milestones/lab-baseline-v0.2.md)
+- [Distillation D1 milestone](docs/milestones/distillation-d1.md)
 
 Quick local baseline:
 
