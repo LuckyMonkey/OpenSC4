@@ -42,3 +42,12 @@ Use a live SC4 session to scan one visible value at a time, then confirm the
 candidate after save/reload and process restart. Promote only summarized
 observations into the lab; keep saves, raw memory, executable bytes, and
 extracted resources private.
+
+## Live launch follow-up
+
+Steam AppID 24780 was launched with Proton Experimental. The live window was
+observed at `3840x1080`, and the exact running executable matched the recorded
+LAA SHA-256. A read-only observatory capture recorded 859 hashed regions, with
+398 executable regions and `raw_bytes_recorded=false`. This proves process
+attachment and artifact identity only; no treasury, date, or power field is
+verified yet.

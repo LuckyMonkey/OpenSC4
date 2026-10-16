@@ -167,6 +167,7 @@ python3 tools/sc4_evidence_pack.py \
   "/absolute/path/to/SimCity 4.exe" \
   --provider ghidra \
   --rea-evidence-id "<REA evidence id>" \
+  --runtime-snapshot /tmp/opensc4-sc4-live-snapshot-01.json \
   --out /tmp/opensc4-sc4-evidence-pack.json \
   --markdown-out /tmp/opensc4-sc4-evidence-pack.md
 ```
@@ -178,3 +179,8 @@ produced 185 named candidates and 57 retained leads, including `g_funds`,
 `g_population`, `g_date`, `g_power_consumed`, `SimulationClock`, and
 `LoadCity`. Every lead remains `candidate_unverified` until it survives a
 controlled runtime scan, save/reload, and second-session check.
+
+When `--runtime-snapshot` is supplied, the pack records only the snapshot
+schema, PID, process name, timestamp, region count, and the explicit
+`raw_bytes_recorded=false` boundary. It does not embed the snapshot or any
+memory contents.

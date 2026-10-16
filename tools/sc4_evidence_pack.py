@@ -69,11 +69,53 @@ def lead_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return leads
 
 
-def build_pack(target: Path, provider: str, rea_evidence_ids: list[str]) -> dict[str, Any]:
+def runtime_summary(snapshot: dict[str, Any], source: Path) -> dict[str, Any]:
+    if snapshot.get("schema") != "sc4-lab.memory-snapshot.v1":
+        raise ValueError("runtime snapshot has an unexpected schema")
+    if snapshot.get("raw_bytes_recorded") is not False:
+        raise ValueError("runtime snapshot is not metadata-only")
+    process = snapshot.get("process")
+    if not isinstance(process, dict) or "pid" not in process:
+        raise ValueError("runtime snapshot has no process identity")
+    return {
+        "status": "captured_metadata_only",
+        "snapshot_schema": snapshot["schema"],
+        "source_artifact": source.name,
+        "captured_utc": snapshot.get("captured_utc"),
+        "pid": process["pid"],
+        "command_basename": process.get("command_basename"),
+        "region_count": len(snapshot.get("regions", [])),
+        "raw_bytes_recorded": False,
+        "verification_state": "process_identity_and_hashed_regions_captured; no city value verified",
+    }
+
+
+def build_pack(
+    target: Path,
+    provider: str,
+    rea_evidence_ids: list[str],
+    runtime_snapshot: tuple[Path, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     target = target.expanduser().resolve()
     manifest = rea_target_manifest.build_manifest(target, provider)
     ledger = sc4_static_candidates.build(target, list(sc4_static_candidates.DEFAULT_PATTERNS))
     leads = lead_candidates(ledger["candidates"])
+    runtime = {
+        "status": "not_collected",
+        "required_inputs": [
+            "user-owned SC4 process under Wine",
+            "small synthetic city with visible date and treasury",
+            "before/after save metadata from tools/reference_capture.py",
+            "read-only candidate scan from tools/memory_observatory.py",
+        ],
+        "verification_rule": "No candidate becomes verified from one correlation; repeat after reload and restart.",
+    }
+    if runtime_snapshot is not None:
+        runtime = {
+            **runtime,
+            "status": "metadata_captured",
+            "observation": runtime_summary(runtime_snapshot[1], runtime_snapshot[0]),
+        }
     return {
         "schema": SCHEMA,
         "pack_kind": "local_sc4_distillation_evidence",
@@ -95,16 +137,7 @@ def build_pack(target: Path, provider: str, rea_evidence_ids: list[str]) -> dict
                 "This pack contains no raw executable bytes, extracted resources, save files, or memory dumps.",
             ],
         },
-        "runtime": {
-            "status": "not_collected",
-            "required_inputs": [
-                "user-owned SC4 process under Wine",
-                "small synthetic city with visible date and treasury",
-                "before/after save metadata from tools/reference_capture.py",
-                "read-only candidate scan from tools/memory_observatory.py",
-            ],
-            "verification_rule": "No candidate becomes verified from one correlation; repeat after reload and restart.",
-        },
+        "runtime": runtime,
         "next_actions": [
             "Start SC4 with the exact target hash in target_manifest.",
             "Create a tiny city and record visible date and treasury.",
@@ -126,17 +159,20 @@ def build_pack(target: Path, provider: str, rea_evidence_ids: list[str]) -> dict
 def markdown(pack: dict[str, Any]) -> str:
     target = pack["target_manifest"]["target"]
     static = pack["static_ledger"]
+    runtime = pack["runtime"]
     lines = [
         "# SC4 local evidence pack",
         "",
-        "This report is a private local artifact. It records metadata and static",
-        "candidate leads only; it is not a runtime proof or a copy of SC4 data.",
+        "This report is a private local artifact. It records metadata, static",
+        "candidate leads, and optional hashed runtime metadata; it is not a copy",
+        "of SC4 data or proof of simulation equivalence.",
         "",
         f"- Target: `{target['basename']}`",
         f"- SHA-256: `{target['sha256']}`",
         f"- Architecture: `{target['pe']['architecture']}`",
         f"- Static candidates: `{static['candidate_count']}`",
         f"- Leads retained: `{static['lead_count']}`",
+        f"- Runtime status: `{runtime['status']}`",
         "",
         "## Highest-value leads",
         "",
@@ -183,12 +219,17 @@ def main() -> int:
     parser.add_argument("target", type=Path)
     parser.add_argument("--provider", default="ghidra")
     parser.add_argument("--rea-evidence-id", action="append", default=[])
+    parser.add_argument("--runtime-snapshot", type=Path, help="optional metadata-only snapshot from memory_observatory.py")
     parser.add_argument("--out", required=True, type=Path, help="private JSON output outside the repository")
     parser.add_argument("--markdown-out", type=Path, help="optional private Markdown report outside the repository")
     args = parser.parse_args()
     try:
         output = safe_output(args.out)
-        pack = build_pack(args.target, args.provider, args.rea_evidence_id)
+        runtime_snapshot = None
+        if args.runtime_snapshot:
+            snapshot_path = args.runtime_snapshot.expanduser().resolve()
+            runtime_snapshot = (snapshot_path, json.loads(snapshot_path.read_text(encoding="utf-8")))
+        pack = build_pack(args.target, args.provider, args.rea_evidence_id, runtime_snapshot)
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(pack, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         if args.markdown_out:
