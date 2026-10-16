@@ -189,6 +189,13 @@ subsystem and retain failed experiments as useful evidence.
   documented. A 45-sample while-playing capture observed funds, tax income,
   and category-total transitions while rates remained fixed. This is runtime
   measurement progress, not a complete budget formula.
+- **D3.10 system-identification tooling complete:**
+  `tools/sc4_system_id.py` now plans controlled runs, records read-only budget
+  response series, and computes paired finite-difference sensitivities and
+  step-response summaries. It intentionally marks simulation time unavailable
+  until a verified SC4 clock field is recovered. The runbook and milestone are
+  `docs/runbooks/sc4-system-identification.md` and
+  `docs/milestones/sc4-system-identification-v0.1.md`.
 - **D4 later:** POWER_001 through POWER_004 reference corpus, then held-out
   candidate evaluation.
 
