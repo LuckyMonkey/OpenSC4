@@ -83,5 +83,6 @@ text = "Launch DAT explorer"
 
 [connection signal="confirmed" from="dialog" to="." method="_on_dialog_confirmed"]
 [connection signal="dir_selected" from="dialog" to="." method="_on_dialog_dir_selected"]
+[connection signal="canceled" from="dialog" to="." method="_on_dialog_canceled"]
 [connection signal="pressed" from="NextScene/VBoxContainer/HBoxContainer/GameButton" to="." method="_on_GameButton_pressed"]
 [connection signal="pressed" from="NextScene/VBoxContainer/HBoxContainer/DATExplorerButton" to="." method="_on_DATExplorerButton_pressed"]

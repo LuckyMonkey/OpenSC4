@@ -26,6 +26,11 @@ var vec2Regex : RegEx = RegEx.new()
 var elementsByID : Dictionary = {}
 var lines : Array = []
 
+# SC4's legacy UI layouts are authored for an 800x600 canvas. Keep that
+# coordinate system intact and place it at the bottom-left of the real
+# viewport, rather than stretching it across an ultrawide window.
+const LEGACY_UI_SIZE := Vector2(800.0, 600.0)
+
 func _init(index):
     rectRegex.compile("\\((?<x>-?\\d+),(?<y>-?\\d+),(?<width>-?\\d+),(?<height>-?\\d+)\\)")
     colorRegex.compile("\\((?<r>\\d+),(?<g>\\d+),(?<b>\\d+)\\)")
@@ -67,10 +72,10 @@ func load(file, dbdf=null):
 
 func add_to_tree(parent : Node, custom_classes : Dictionary):
     parent.add_child(self.root)
-    root.set_anchor(SIDE_LEFT, 0)
-    root.set_anchor(SIDE_TOP, 0)
-    root.set_anchor(SIDE_RIGHT, 1)
-    root.set_anchor(SIDE_BOTTOM, 1)
+    root.set_anchors_preset(Control.PRESET_TOP_LEFT)
+    root.size = LEGACY_UI_SIZE
+    root.get_viewport().size_changed.connect(_position_legacy_ui)
+    _position_legacy_ui()
     var current_element : Control = self.root
     var last_element : Control = null
     # We add children to current_element
@@ -92,6 +97,13 @@ func add_to_tree(parent : Node, custom_classes : Dictionary):
             elif tag_name == '/CHILDREN':
                 current_element = current_element.get_parent()
     root.name = 'SC4 UI root'
+
+func _position_legacy_ui():
+    if not is_instance_valid(root) or not root.is_inside_tree():
+        return
+    var viewport_size = root.get_viewport_rect().size
+    root.position = Vector2(0.0, max(0.0, viewport_size.y - LEGACY_UI_SIZE.y))
+    root.size = LEGACY_UI_SIZE
 
 func create_element(attributes : Dictionary, custom_classes : Dictionary) -> Control:
     var type = attributes.get('iid', 'none')

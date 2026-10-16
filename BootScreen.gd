@@ -24,66 +24,25 @@ var dat_files : Array = [
 func _ready():
     #_generate_types_dict_from_XML()
     config = INI.new("user://config.ini")
-    if config.sections.size() > 0:
-        Core.game_dir = config.sections["paths"]["sc4_files"]
-    else:
+    Core.game_dir = ""
+    if config.sections.has("paths"):
+        Core.game_dir = str(config.sections["paths"].get("sc4_files", ""))
+
+    while not _game_dir_is_complete(Core.game_dir):
+        $dialog.title = "Select the SimCity 4 installation folder"
         $dialog.popup_centered(get_viewport_rect().size / 2)
-        await $dialog.confirmed
-        config.sections["paths"] = {}
-        config.sections["paths"]["sc4_files"] = Core.game_dir
-        config.save_file()
-    
-    #TODO check if files exist in current Core.game_dir
-    var dir: DirAccess
-    dir = DirAccess.open(Core.game_dir)
-    var dir_complete = true
-    while not dir_complete:
-        if dir != null:
-            dir.list_dir_begin()
-            var files = []
-            var file_name = dir.get_next()
-            while file_name != "":
-                files.append(file_name)
-                file_name = dir.get_next()
-            for dat in dat_files:
-                if "/" in dat:
-                    var folders = dat.split('/')
-                    var folder_dir = ""
-                    for folder in range(len(folders)-1):
-                        folder_dir += ("/" + folders[folder])
-                    var file_n = folders[-1]
-                    var subdir: DirAccess
-                    print(Core.game_dir+folder_dir)
-                    subdir = DirAccess.open(Core.game_dir+folder_dir)
-                    if subdir != null:
-                        subdir.list_dir_begin()
-                        var subfile_name = subdir.get_next()
-                        var found = false
-                        while subfile_name != "":
-                            if subfile_name == file_n:
-                                found = true
-                                break
-                            subfile_name = subdir.get_next()
-                        if not found:
-                            dir_complete = false
-                            print(dat, "not found")
-                    else:
-                        dir_complete = false
-                        print(dat, "not found")
-                        
-                elif not files.has(dat):
-                    dir_complete = false
-                    print(dat, "not found")
-        else:
-            dir_complete = false
-        if not dir_complete:
-            $dialog.title = "dir was incomplete, select the SC4 installation folder"
-            $dialog.popup_centered(get_viewport_rect().size / 2)
-            await $dialog.popup_hide
-            print("todo: store path in cfg.ini")
-            config.sections["paths"] = {}
-            config.sections["paths"]["sc4_files"] = Core.game_dir
-            config.save_file()
+        # FileDialog hides itself through the handlers below after either a
+        # selection or cancellation. This keeps the boot path asynchronous
+        # without depending on the inherited `confirmed` signal.
+        while $dialog.visible:
+            await get_tree().process_frame
+        if Core.game_dir.is_empty():
+            Log.error("No valid SimCity 4 installation folder was selected")
+            get_tree().quit(1)
+            return
+
+    config.sections["paths"] = {"sc4_files": Core.game_dir}
+    config.save_file()
     $dialog.deselect_all()
     $LoadProgress.value = 0
     loading_thread = Thread.new()
@@ -98,8 +57,17 @@ func _ready():
         Log.error("Error starting thread: " % err)
         return
 
+func _game_dir_is_complete(path: String) -> bool:
+    if path.is_empty() or not DirAccess.dir_exists_absolute(path):
+        return false
+    for dat_file in dat_files:
+        if not FileAccess.file_exists(path.path_join(dat_file)):
+            return false
+    return true
+
 func _exit_tree():
-    loading_thread.wait_to_finish()	
+    if loading_thread != null:
+        loading_thread.wait_to_finish()
 
 func load_DATs():
     for dat_file in dat_files :
@@ -123,6 +91,14 @@ func load_single_DAT(dat_file : String):
 
 func _on_dialog_confirmed():
     Core.game_dir = $dialog.current_dir
+
+func _on_dialog_dir_selected(path: String):
+    Core.game_dir = path
+    $dialog.hide()
+
+func _on_dialog_canceled():
+    Core.game_dir = ""
+    $dialog.hide()
 
 func _on_DATExplorerButton_pressed():
     print("here")
