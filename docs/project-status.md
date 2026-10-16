@@ -24,6 +24,7 @@ claim.
 | Simulation events/protocol | Implemented | Event cursors + JSON-line adapter contract |
 | Observation comparator | Implemented | `sc4-lab/verifier/compare.py`, policy separated |
 | Local reference capture | Implemented, awaiting SC4 input | Save hashes/deltas + user-owned process metadata |
+| Dynamic memory observatory | Implemented, awaiting SC4 input | Read-only scan/snapshot/watch tooling |
 
 ## Current strengths
 

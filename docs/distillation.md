@@ -164,7 +164,9 @@ subsystem and retain failed experiments as useful evidence.
 - **D2 tooling complete:** local save/process capture tooling is ready; the
   capability inventory and first real SC4 capture remain open because no live
   process or `.sc4` save is currently available in the workspace.
-- **D3 later:** POWER_001 through POWER_004 reference corpus, then held-out
+- **D3 tooling complete:** typed memory scans, hashed snapshots, address
+  sampling, and a synthetic self-test are ready; no SC4 address is verified.
+- **D4 later:** POWER_001 through POWER_004 reference corpus, then held-out
   candidate evaluation.
 
 The implementation must remain honest about this boundary: synthetic protocol

@@ -58,6 +58,7 @@ Godot clone of SimCity4
 - [Performance runbook](docs/runbooks/performance.md)
 - [Reference-lab runbook](docs/runbooks/reference-lab.md)
 - [Reference capture tool](tools/reference_capture.py)
+- [Memory observatory runbook](docs/runbooks/memory-observatory.md)
 - [OpenGlassBox bridge runbook](docs/runbooks/openglassbox-bridge.md)
 - [Development iteration and Git sync](docs/runbooks/iteration.md)
 - [Simulation backend seam](docs/runbooks/simulation-backend.md)
@@ -65,6 +66,7 @@ Godot clone of SimCity4
 - [Baseline milestone report](docs/milestones/lab-baseline-v0.2.md)
 - [Distillation D1 milestone](docs/milestones/distillation-d1.md)
 - [Distillation D2 milestone](docs/milestones/distillation-d2.md)
+- [Distillation D3 milestone](docs/milestones/distillation-d3.md)
 
 Quick local baseline:
 

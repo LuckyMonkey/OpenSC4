@@ -90,7 +90,16 @@ observed reliably, mark it unsupported instead of estimating it from pixels.
 Local save/process metadata capture and changed-range reports are implemented;
 the first real run still needs a user-owned `.sc4` save and live process.
 
-### D3: power corpus (next after D2)
+The read-only dynamic memory observatory is also ready for candidate scanning,
+hashed snapshots, and address sampling. It has only been tested against a
+synthetic child process so far.
+
+### D3: dynamic memory observatory (tooling done; live input needed)
+
+Typed scans, hashed snapshots, and address sampling are ready. No SC4 address
+is verified until a live process is captured and validated across restarts.
+
+### D4: power corpus (next after D3)
 
 Run one plant, altered demand, funding changes, and two-plant cases. Record
 month-end state plus the actual sampling schedule and uncertainty.
@@ -98,7 +107,7 @@ month-end state plus the actual sampling schedule and uncertainty.
 The independent JSON comparator and fixed policy file are now ready for those
 observations; no reference values have been added yet.
 
-### D4: candidate power model (later)
+### D5: candidate power model (later)
 
 Implement only behavior supported by observations, then evaluate held-out cases.
 
