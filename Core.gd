@@ -37,6 +37,14 @@ func fast_water_enabled() -> bool:
     return has_runtime_flag("--sc4-fast-water") \
         or OS.get_environment("OPENSC4_FAST_WATER") == "1"
 
+func spatial_batching_enabled() -> bool:
+    return has_runtime_flag("--sc4-spatial-batches") \
+        or OS.get_environment("OPENSC4_SPATIAL_BATCHES") == "1"
+
+func view_batch_cache_enabled() -> bool:
+    return has_runtime_flag("--sc4-cache-view-batches") \
+        or OS.get_environment("OPENSC4_CACHE_VIEW_BATCHES") == "1"
+
 var type_dict_to_text = {
     0x6534284a: "exemplar",
     0x2026960b: "LTEXT",

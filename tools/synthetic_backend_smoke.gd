@@ -14,6 +14,8 @@ func _expect(condition : bool, message : String) -> bool:
 
 func _ready() -> void:
     var backend = SyntheticPowerBackendScript.new()
+    if not _expect(backend.capabilities()["supports_commands"], "backend capabilities"):
+        return
     backend.reset({
         "demand": 50.0,
         "plants": [{"capacity": 100.0, "funding": 1.0}],
@@ -29,9 +31,15 @@ func _ready() -> void:
     if not _expect(is_equal_approx(shortfall["unmet_demand"], 50.0), "demand shortfall"):
         return
 
-    backend.add_plant(50.0)
+    var command = backend.apply_command({"type": "add_plant", "capacity": 50.0})
+    if not _expect(command["accepted"], "accepted command"):
+        return
     var balanced = backend.snapshot()
     if not _expect(is_equal_approx(balanced["supplied_power"], 150.0), "second plant supply"):
+        return
+    if not _expect(
+        not backend.apply_command({"type": "set_funding", "index": 99, "value": 1.0})["accepted"],
+        "rejected invalid command"):
         return
 
     backend.advance_seconds(30.0)

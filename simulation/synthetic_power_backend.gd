@@ -13,6 +13,17 @@ var demand := 0.0
 var plants : Array[Dictionary] = []
 var _last_metrics : Dictionary = {}
 
+func backend_id() -> String:
+    return "synthetic-power-v1"
+
+func capabilities() -> Dictionary:
+    return {
+        "api_version": API_VERSION,
+        "fixed_tick_seconds": TICK_SECONDS,
+        "supports_commands": true,
+        "supports_save_load": true,
+    }
+
 func reset(scenario : Dictionary) -> void:
     simulation_tick = 0
     simulation_month = 0
@@ -43,6 +54,20 @@ func set_funding(index : int, value : float) -> bool:
     _recompute_metrics()
     return true
 
+func apply_command(command : Dictionary) -> Dictionary:
+    var kind = command.get("type", "")
+    match kind:
+        "set_demand":
+            set_demand(float(command.get("value", 0.0)))
+        "set_funding":
+            if not set_funding(int(command.get("index", -1)), float(command.get("value", 0.0))):
+                return {"accepted": false, "error": "invalid_plant_index", "command": command}
+        "add_plant":
+            add_plant(float(command.get("capacity", 0.0)), float(command.get("funding", 1.0)))
+        _:
+            return {"accepted": false, "error": "unknown_command", "command": command}
+    return {"accepted": true, "command": command, "snapshot": snapshot()}
+
 func advance_seconds(seconds : float) -> Dictionary:
     if seconds < 0.0:
         return snapshot()
@@ -57,6 +82,7 @@ func advance_seconds(seconds : float) -> Dictionary:
 
 func snapshot() -> Dictionary:
     var result = _last_metrics.duplicate(true)
+    result["backend_id"] = backend_id()
     result["api_version"] = API_VERSION
     result["simulation_tick"] = simulation_tick
     result["simulation_month"] = simulation_month

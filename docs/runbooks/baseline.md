@@ -26,9 +26,13 @@ directory. It never copies SC4 files there.
 
 - import exits zero;
 - the synthetic backend log contains `SYNTHETIC BACKEND PASS`;
+- the parser fixture log contains `PARSER FIXTURE PASS`;
 - the city log contains `SWEEP COMPLETE`;
 - if Xvfb is installed, the screenshot log contains `SCREENSHOTS DONE`;
 - `SCRIPT ERROR` is absent from the logs.
+
+The Xvfb screenshot subprocess uses `LIBGL_ALWAYS_SOFTWARE=1` for repeatable
+CI-style captures. This is separate from the real RTX/X11 performance test.
 
 The current harness can still report ObjectDB/resource leak warnings during
 Godot shutdown after a successful sweep. Track those separately from load

@@ -30,16 +30,23 @@ contains no protected game content.
 `OPENSC4_FAST_WATER=1` disables animated water noise/depth effects for a clean
 performance comparison. The default visual path is unchanged.
 
-### B2: frame-time probe (next)
+### B2: frame-time probe (done)
 
 Measure startup, first city frame, steady-state panning, zoom/rotation changes,
 and free-camera transitions separately. Report CPU/GPU frame time rather than
 GPU utilization alone.
 
-### B3: batch-view reuse (next)
+The first software-rendered comparison is recorded in
+`docs/performance-baseline.md`.
+
+### B3: batch-view reuse (done, opt-in)
 
 Profile the MultiMesh rebuild on view changes. Replace destructive rebuilds with
 reusable per-view data only if memory and visual results are measured first.
+
+The bounded two-view cache reduces a measured revisit from about 1.52 seconds
+to 79 ms under the software-rendered probe. It remains opt-in pending real GPU
+memory testing.
 
 ### B4: terrain/water level-of-detail (later)
 

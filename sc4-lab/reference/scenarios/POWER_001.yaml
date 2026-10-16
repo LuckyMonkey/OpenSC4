@@ -1,0 +1,24 @@
+schema: sc4-lab.scenario.v1
+test_id: POWER_001
+status: draft
+purpose: Establish the first controlled power-generation observation.
+initial_city:
+  size: small
+  population: 0
+  buildings:
+    - kind: coal_power_plant
+      count: 1
+actions:
+  - run_months: 1
+  - sample_metrics: true
+  - run_months: 11
+  - sample_metrics: true
+metrics:
+  - generated_power
+  - electricity_demand
+  - operating_cost
+  - plant_condition
+  - pollution
+notes:
+  - No reference values are committed yet.
+  - This is a synthetic scenario description, not an original SC4 save.

@@ -15,6 +15,10 @@ claim.
 | Simulation seam | Contract + synthetic backend smoke test | No SC4 behavior has been measured or claimed |
 | SC4 reference adapter | Not implemented | No reference observations are committed |
 | OpenGlassBox bridge | Not implemented | External library builds; no Godot ABI boundary yet |
+| Performance probe | Implemented | Windowed startup/pan/view timing tool |
+| Parser fixture smoke | Implemented | Synthetic malformed-record and UI-bound tests |
+| Spatial batching | Opt-in experiment | `OPENSC4_SPATIAL_BATCHES=1` |
+| View-batch cache | Measured, opt-in | `OPENSC4_CACHE_VIEW_BATCHES=1`, two-view LRU |
 
 ## Current strengths
 

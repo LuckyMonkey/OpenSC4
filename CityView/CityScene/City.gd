@@ -1108,6 +1108,7 @@ const RKT1_PROP : int = 0x27812821
 const ROT_SIGN : int = -1
 # Camera zoom 1..6 (CameraAnchor3D.zoom) -> S3D szoom LOD 0..4.
 const S3D_ZOOM_FOR_CAMERA = [0, 1, 2, 3, 4, 4]
+const SPATIAL_BATCH_CHUNK_TILES := 32.0
 
 var building_root : Node3D
 # Props and flora are numerous but usually reuse a small set of S3D meshes.
@@ -1115,6 +1116,9 @@ var building_root : Node3D
 # few MultiMeshInstance3D nodes instead of tens of thousands of scene nodes.
 var batched_root : Node3D
 var batched_occupants : Array = []
+var batched_view_cache : Dictionary = {}
+var batched_view_lru : Array = []
+const VIEW_BATCH_CACHE_LIMIT := 2
 # Concrete variant TGI string -> {"mesh": ArrayMesh} or null for known-unbuildable.
 var model_cache = {}
 var opaque_mat_base : ShaderMaterial
@@ -1181,9 +1185,24 @@ func _rebuild_batched_occupants():
         batched_root = Node3D.new()
         batched_root.name = "BatchedProps"
         $Node3D.add_child(batched_root)
-    for child in batched_root.get_children():
-        batched_root.remove_child(child)
-        child.free()
+    var cache_enabled = Core.view_batch_cache_enabled()
+    var cache_key = "%d|%d|%.6f|%s" % [
+        current_s3d_zoom, current_s3d_rot, current_rot_comp,
+        "spatial" if Core.spatial_batching_enabled() else "global"]
+    if cache_enabled and batched_view_cache.has(cache_key):
+        _activate_view_batch(cache_key)
+        return
+
+    var target_root = batched_root
+    if cache_enabled:
+        target_root = Node3D.new()
+        target_root.name = "View_%s" % cache_key.replace("|", "_")
+        target_root.visible = false
+        batched_root.add_child(target_root)
+    else:
+        for child in batched_root.get_children():
+            batched_root.remove_child(child)
+            child.free()
 
     var groups = {}
     var resolved_models = {}
@@ -1201,11 +1220,15 @@ func _rebuild_batched_occupants():
             resolved_models[model_key] = model
         if model == null:
             continue
+        var position : Vector3 = entry["position"]
         var angle = current_rot_comp if ref["prop_key"] == RKT1_PROP else 0.0
         var key = "%d|%.6f" % [model["mesh"].get_instance_id(), angle]
+        if Core.spatial_batching_enabled():
+            var chunk_x = floori(position.x / SPATIAL_BATCH_CHUNK_TILES)
+            var chunk_z = floori(position.z / SPATIAL_BATCH_CHUNK_TILES)
+            key += "|%d|%d" % [chunk_x, chunk_z]
         if not groups.has(key):
             groups[key] = {"mesh": model["mesh"], "angle": angle, "transforms": []}
-        var position : Vector3 = entry["position"]
         var basis = Basis().rotated(Vector3.UP, angle)
         groups[key]["transforms"].append(Transform3D(basis, position))
 
@@ -1218,9 +1241,32 @@ func _rebuild_batched_occupants():
             multimesh.set_instance_transform(i, group["transforms"][i])
         var instance = MultiMeshInstance3D.new()
         instance.multimesh = multimesh
-        batched_root.add_child(instance)
-    Log.info("Batched %d props/flora occupants into %d MultiMesh nodes"
-        % [batched_occupants.size(), groups.size()])
+        target_root.add_child(instance)
+    if cache_enabled:
+        batched_view_cache[cache_key] = target_root
+        batched_view_lru.erase(cache_key)
+        batched_view_lru.append(cache_key)
+        _trim_view_batch_cache(cache_key)
+        _activate_view_batch(cache_key)
+    Log.info("Batched %d props/flora occupants into %d MultiMesh nodes (spatial=%s)"
+        % [batched_occupants.size(), groups.size(), Core.spatial_batching_enabled()])
+
+func _activate_view_batch(cache_key : String) -> void:
+    for key in batched_view_cache:
+        batched_view_cache[key].visible = key == cache_key
+    batched_view_lru.erase(cache_key)
+    batched_view_lru.append(cache_key)
+
+func _trim_view_batch_cache(active_key : String) -> void:
+    while batched_view_lru.size() > VIEW_BATCH_CACHE_LIMIT:
+        var old_key = batched_view_lru[0]
+        if old_key == active_key:
+            batched_view_lru.push_back(batched_view_lru.pop_front())
+            continue
+        batched_view_lru.pop_front()
+        var old_root = batched_view_cache[old_key]
+        batched_view_cache.erase(old_key)
+        old_root.queue_free()
 
 # --- 2D (sprite) props -------------------------------------------------------
 #
