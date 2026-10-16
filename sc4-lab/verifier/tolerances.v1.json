@@ -1,0 +1,11 @@
+{
+  "schema": "sc4-lab.tolerances.v1",
+  "default": null,
+  "metrics": {
+    "generated_power": {"mode": "exact"},
+    "electricity_demand": {"mode": "exact"},
+    "operating_cost": {"mode": "exact"},
+    "plant_condition": {"mode": "exact"},
+    "pollution": {"mode": "exact"}
+  }
+}

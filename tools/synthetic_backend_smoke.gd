@@ -16,6 +16,8 @@ func _ready() -> void:
     var backend = SyntheticPowerBackendScript.new()
     if not _expect(backend.capabilities()["supports_commands"], "backend capabilities"):
         return
+    if not _expect(backend.capabilities()["supports_events"], "event capabilities"):
+        return
     backend.reset({
         "demand": 50.0,
         "plants": [{"capacity": 100.0, "funding": 1.0}],
@@ -31,8 +33,11 @@ func _ready() -> void:
     if not _expect(is_equal_approx(shortfall["unmet_demand"], 50.0), "demand shortfall"):
         return
 
+    var cursor_before_command = backend.event_cursor()
     var command = backend.apply_command({"type": "add_plant", "capacity": 50.0})
     if not _expect(command["accepted"], "accepted command"):
+        return
+    if not _expect(backend.events_since(cursor_before_command).size() == 1, "command event"):
         return
     var balanced = backend.snapshot()
     if not _expect(is_equal_approx(balanced["supplied_power"], 150.0), "second plant supply"):
@@ -42,8 +47,11 @@ func _ready() -> void:
         "rejected invalid command"):
         return
 
+    var cursor_before_month = backend.event_cursor()
     backend.advance_seconds(30.0)
     if not _expect(backend.snapshot()["simulation_month"] == 1, "fixed month clock"):
+        return
+    if not _expect(backend.events_since(cursor_before_month).size() == 1, "month event"):
         return
 
     var saved = backend.save_state()

@@ -45,6 +45,11 @@ Allowed metric statuses are `observed`, `unsupported`, `uncertain`, and
 `not_applicable`. Observed values must include units and, when needed, a
 confidence/uncertainty note.
 
+Adapters may serialize the same record as JSON for the sidecar and verifier.
+The JSON object shape is identical to the YAML examples above; the comparator
+is `sc4-lab/verifier/compare.py` and its policy is kept separately from both
+adapters.
+
 ## Candidate comparison
 
 Candidate output uses the same metric names and adds `backend_id`. The verifier

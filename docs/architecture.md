@@ -42,6 +42,7 @@ The first interface should answer only these questions:
 - Which commands were accepted, rejected, or deferred?
 - What changed since the previous snapshot?
 - Can the state be serialized and loaded with a version/fingerprint?
+- What event cursor and save schema identify the state version?
 - What errors are recoverable versus fatal?
 
 Keep commands and snapshots plain data. Do not expose Godot `Node` pointers,
@@ -57,4 +58,6 @@ OpenGlassBox C++ references, or proprietary SC4 parser objects across the seam.
    substitute for a full OpenGlassBox bridge.
 
 The bridge must define ownership, thread affinity, error propagation, fixed
-tick advancement, and shutdown before it is used by the main scene.
+tick advancement, event cursors, save fingerprints, and shutdown before it is
+used by the main scene. The sidecar-compatible envelope is documented in
+`sc4-lab/adapters/PROTOCOL.md`.

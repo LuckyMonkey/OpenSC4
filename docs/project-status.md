@@ -21,6 +21,8 @@ claim.
 | View-batch cache | Measured, opt-in | `OPENSC4_CACHE_VIEW_BATCHES=1`, two-view LRU |
 | Baseline artifact manifest | Implemented | `opensc4.baseline.v1` in each run output |
 | Data boundary gate | Implemented | `tools/check_data_boundary.sh` |
+| Simulation events/protocol | Implemented | Event cursors + JSON-line adapter contract |
+| Observation comparator | Implemented | `sc4-lab/verifier/compare.py`, policy separated |
 
 ## Current strengths
 
@@ -36,6 +38,8 @@ claim.
   backend now exercise clocking, supply/demand, snapshots, and save/load.
 - Baseline outputs now carry reproducibility metadata without recording local
   game paths or game contents.
+- The backend seam now supports validation, bounded event history, save schema,
+  and backend fingerprints without coupling to OpenGlassBox.
 
 ## Known risks
 

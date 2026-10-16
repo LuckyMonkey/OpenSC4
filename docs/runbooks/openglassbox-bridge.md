@@ -27,9 +27,10 @@ available. Do not install packages as part of a normal OpenSC4 regression run.
 
 1. Write the plain-data OpenSC4 `SimulationBackend` contract.
 2. Implement a tiny deterministic fake backend and tests against the contract.
-3. Prototype OpenGlassBox in a standalone adapter or sidecar.
-4. Define ownership, fixed-tick advancement, events, snapshots, errors, and
-   save fingerprints.
+3. Prototype OpenGlassBox in a standalone adapter or JSON-line sidecar using
+   `sc4-lab/adapters/PROTOCOL.md`.
+4. Define ownership, fixed-tick advancement, event cursors, snapshots, errors,
+   backend fingerprints, and save schemas.
 5. Build a small GDExtension that exposes only the contract.
 6. Add city rendering integration after lifecycle/shutdown tests pass.
 

@@ -92,6 +92,9 @@ observed reliably, mark it unsupported instead of estimating it from pixels.
 Run one plant, altered demand, funding changes, and two-plant cases. Record
 month-end state plus the actual sampling schedule and uncertainty.
 
+The independent JSON comparator and fixed policy file are now ready for those
+observations; no reference values have been added yet.
+
 ### D4: candidate power model (later)
 
 Implement only behavior supported by observations, then evaluate held-out cases.
@@ -100,8 +103,9 @@ Implement only behavior supported by observations, then evaluate held-out cases.
 
 ### E1: backend-neutral API (done)
 
-Define commands, snapshots, events, clock semantics, and save-versioning in
-OpenSC4 without choosing OpenGlassBox-specific types.
+Define commands, snapshots, event cursors, clock semantics, and save-versioning
+in OpenSC4 without choosing OpenGlassBox-specific types. The JSON-line adapter
+envelope and independent comparator now make the seam usable outside Godot.
 
 ### E2: synthetic backend (done)
 
@@ -109,10 +113,11 @@ Add a tiny deterministic backend for API tests: buildings, resource stocks,
 power supply/demand, monthly ticks, and serialization. This tests the seam
 without pretending to match SC4.
 
-### E3: OpenGlassBox adapter (later)
+### E3: OpenGlassBox adapter (next)
 
 Pin an external OpenGlassBox commit and expose it through a narrow C++ bridge.
-Do not vendor a large source snapshot into the Godot project.
+The first implementation should speak the sidecar protocol before a GDExtension
+is attempted. Do not vendor a large source snapshot into the Godot project.
 
 ### E4: SC4-compatible backend (later)
 

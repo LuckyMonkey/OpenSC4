@@ -58,6 +58,7 @@ Godot clone of SimCity4
 - [Reference-lab runbook](docs/runbooks/reference-lab.md)
 - [OpenGlassBox bridge runbook](docs/runbooks/openglassbox-bridge.md)
 - [Development iteration and Git sync](docs/runbooks/iteration.md)
+- [Simulation backend seam](docs/runbooks/simulation-backend.md)
 - [Future work and wishlist](docs/future-work.md)
 - [Baseline milestone report](docs/milestones/lab-baseline-v0.2.md)
 
