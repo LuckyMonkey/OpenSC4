@@ -1050,6 +1050,7 @@ func _place_occupants(recs : Array, what : String):
     var placed = 0
     var sprites = 0
     var no_model = 0
+    var can_batch = what == "props" or what == "flora"
     for rec in recs:
         var ref = _model_ref_for_exemplar(rec.exemplar_tgi)
         if ref == null:
@@ -1065,6 +1066,15 @@ func _place_occupants(recs : Array, what : String):
         if model == null:
             no_model += 1
             continue
+        if can_batch:
+            batched_occupants.append({
+                "ref": ref,
+                "orientation": rec.orientation,
+                "pos_x": rec.pos_x,
+                "pos_z": rec.pos_z,
+            })
+            placed += 1
+            continue
         var mi = MeshInstance3D.new()
         mi.mesh = model["mesh"]
         mi.set_meta("model_ref", ref)
@@ -1076,6 +1086,8 @@ func _place_occupants(recs : Array, what : String):
         mi.position = Vector3(x, _height_at(x, z), z)
         building_root.add_child(mi)
         placed += 1
+    if can_batch:
+        _rebuild_batched_occupants()
     Log.info("Placed %d %s, %d as 2D sprites (%d without a resolvable model)"
         % [placed, what, sprites, no_model])
 
@@ -1093,6 +1105,11 @@ const ROT_SIGN : int = -1
 const S3D_ZOOM_FOR_CAMERA = [0, 1, 2, 3, 4, 4]
 
 var building_root : Node3D
+# Props and flora are numerous but usually reuse a small set of S3D meshes.
+# Keep their placement records so the renderer can draw each mesh as one or a
+# few MultiMeshInstance3D nodes instead of tens of thousands of scene nodes.
+var batched_root : Node3D
+var batched_occupants : Array = []
 # Concrete variant TGI string -> {"mesh": ArrayMesh} or null for known-unbuildable.
 var model_cache = {}
 var opaque_mat_base : ShaderMaterial
@@ -1148,6 +1165,50 @@ func _resolve_model(ref : Dictionary, s3d_zoom : int, rot : int) -> Variant:
         model_cache[key] = built
         return built
     return null
+
+# Rebuilds the prop/flora batches for the current zoom and camera rotation.
+# The baked S3D variant can change with either value, so rebuilding only on a
+# view change keeps ordinary panning cheap while preserving SC4's impostor art.
+func _rebuild_batched_occupants():
+    if batched_occupants.is_empty():
+        return
+    if batched_root == null:
+        batched_root = Node3D.new()
+        batched_root.name = "BatchedProps"
+        $Node3D.add_child(batched_root)
+    for child in batched_root.get_children():
+        batched_root.remove_child(child)
+        child.free()
+
+    var groups = {}
+    for entry in batched_occupants:
+        var ref = entry["ref"]
+        var vrot = posmod(current_s3d_rot + ROT_SIGN * entry["orientation"], 4)
+        var model = _resolve_model(ref, current_s3d_zoom, vrot)
+        if model == null:
+            continue
+        var angle = current_rot_comp if ref["prop_key"] == RKT1_PROP else 0.0
+        var key = "%d|%.6f" % [model["mesh"].get_instance_id(), angle]
+        if not groups.has(key):
+            groups[key] = {"mesh": model["mesh"], "angle": angle, "transforms": []}
+        var x = entry["pos_x"] / TILE_SIZE
+        var z = entry["pos_z"] / TILE_SIZE
+        var basis = Basis().rotated(Vector3.UP, angle)
+        groups[key]["transforms"].append(
+            Transform3D(basis, Vector3(x, _height_at(x, z), z)))
+
+    for group in groups.values():
+        var multimesh = MultiMesh.new()
+        multimesh.transform_format = MultiMesh.TRANSFORM_3D
+        multimesh.mesh = group["mesh"]
+        multimesh.instance_count = group["transforms"].size()
+        for i in range(group["transforms"].size()):
+            multimesh.set_instance_transform(i, group["transforms"][i])
+        var instance = MultiMeshInstance3D.new()
+        instance.multimesh = multimesh
+        batched_root.add_child(instance)
+    Log.info("Batched %d props/flora occupants into %d MultiMesh nodes"
+        % [batched_occupants.size(), groups.size()])
 
 # --- 2D (sprite) props -------------------------------------------------------
 #
@@ -1459,6 +1520,7 @@ func set_building_view(cam_zoom : int, rotated : int, free_rot : int = -1):
             if model != null:
                 mi.mesh = model["mesh"]        # else keep the previous variant
             mi.rotation.y = comp
+    _rebuild_batched_occupants()
     _set_sprite_view(zoom, rot)
 
 # Terrain altitude (world units) at tile coordinate (x, z), matching create_terrain's
