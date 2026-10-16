@@ -184,6 +184,11 @@ subsystem and retain failed experiments as useful evidence.
   taxable-base formula and a complete budget-update observation remain open.
   The independently authored record is
   `docs/milestones/sc4-tax-distillation-v0.1.md`.
+- **D3.9 budget telemetry complete:** the live funds getter, saturating funds
+  adder, notification path, and structured read-only budget probe are
+  documented. A 45-sample while-playing capture observed funds, tax income,
+  and category-total transitions while rates remained fixed. This is runtime
+  measurement progress, not a complete budget formula.
 - **D4 later:** POWER_001 through POWER_004 reference corpus, then held-out
   candidate evaluation.
 

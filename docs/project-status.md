@@ -30,6 +30,7 @@ claim.
 | Private SC4 evidence pack | Implemented, static-only | Target manifest + 57 categorized leads; runtime input pending |
 | Live SC4 hashed capture | First runtime milestone | 859 launch regions, 913 city regions, 143 transition changes |
 | SC4 tax path | First native distillation milestone | Proven rate storage/getter/setter and tax-income writer boundary; full taxable-base formula pending |
+| SC4 budget telemetry | Implemented, live capture | Authoritative funds/tax-rate/category-total probe; 45-sample while-playing transition captured |
 
 ## Current strengths
 
@@ -79,6 +80,9 @@ claim.
   behavior were proven. All twelve rates were temporarily raised from `9.0`
   to `20.0` in process memory; no executable or save was changed. See
   `docs/milestones/sc4-tax-distillation-v0.1.md`.
+- The authoritative budget getter and native funds adder are now resolved. A
+  read-only probe follows the budget global and captures funds, tax income,
+  twelve tax rates, and per-category totals without screenshot inference.
 - OpenGlassBox has its own simulation concepts and a dual GPL/commercial
   licensing policy; dependency review is required before distribution.
 

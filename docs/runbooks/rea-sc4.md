@@ -123,6 +123,19 @@ recalculated. Record the experiment as runtime metadata outside Git. The full
 result and formula boundary are in
 `docs/milestones/sc4-tax-distillation-v0.1.md`.
 
+For live budget metrics, use the read-only probe rather than previously found
+UI/cache addresses:
+
+```bash
+python3 tools/sc4_budget_probe.py \
+  --pid <sc4-pid> --duration 90 --interval 2 \
+  --out /tmp/opensc4-budget-live.jsonl
+```
+
+It follows the mapped image base to the budget global and records only scalar
+funds, tax income, tax rates, and category totals. The native funds adder is a
+separate user-authorized cheat path and is never invoked by this probe.
+
 ## First milestones
 
 1. **REA connected**: both doctors healthy and Codex sees the REA tools.
