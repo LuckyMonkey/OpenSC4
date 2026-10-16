@@ -26,7 +26,8 @@ claim.
 | Local reference capture | Implemented, awaiting SC4 input | Save hashes/deltas + user-owned process metadata |
 | Dynamic memory observatory | Implemented, awaiting SC4 input | Read-only scan/snapshot/watch tooling |
 | REA integration | Connected, Ghidra healthy, bridge timeout | Codex MCP/skill aligned; native queries bounded |
-| Static candidate ledger | Implemented, unverified | 178 named-string candidates + code references |
+| Static candidate ledger | Implemented, unverified | 185 named-string candidates + code references |
+| Private SC4 evidence pack | Implemented, static-only | Target manifest + 57 categorized leads; runtime input pending |
 
 ## Current strengths
 
@@ -65,6 +66,9 @@ claim.
 - Ghidra is now installed and healthy, but REA's native bridge times out on
   this legacy PE; the local candidate ledger preserves leads without claiming
   function boundaries or runtime authority.
+- The evidence pack organizes those leads for runtime follow-up, but no field
+  is verified until a live process survives controlled change, reload, and
+  restart checks.
 - OpenGlassBox has its own simulation concepts and a dual GPL/commercial
   licensing policy; dependency review is required before distribution.
 

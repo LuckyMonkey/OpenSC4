@@ -156,3 +156,25 @@ It records selected named strings, PE virtual addresses, and static `objdump`
 instruction references only. It does not establish function boundaries,
 calling conventions, authoritative state, or runtime writes. Use it to choose
 the next REA/Ghidra address, not as a substitute for REA evidence.
+
+## Private evidence-pack export
+
+The bounded ledger can now be packaged with target provenance, categorized
+hypotheses, REA evidence IDs, runtime requirements, and the data boundary:
+
+```bash
+python3 tools/sc4_evidence_pack.py \
+  "/absolute/path/to/SimCity 4.exe" \
+  --provider ghidra \
+  --rea-evidence-id "<REA evidence id>" \
+  --out /tmp/opensc4-sc4-evidence-pack.json \
+  --markdown-out /tmp/opensc4-sc4-evidence-pack.md
+```
+
+This is the project's local equivalent of an export: it extracts structured
+metadata and candidate leads, not executable bytes or proprietary data. The
+tool refuses output paths inside the Git repository. The current LAA backup
+produced 185 named candidates and 57 retained leads, including `g_funds`,
+`g_population`, `g_date`, `g_power_consumed`, `SimulationClock`, and
+`LoadCity`. Every lead remains `candidate_unverified` until it survives a
+controlled runtime scan, save/reload, and second-session check.

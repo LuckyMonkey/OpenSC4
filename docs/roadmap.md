@@ -117,11 +117,19 @@ existing read-only memory and save-capture tools.
 
 The provider is healthy, but three REA native operations currently hit the
 330-second Ghidra bridge timeout on the legacy PE. The bounded fallback ledger
-now records 178 named-string candidates and static references. Strong leads are
+now records 185 named-string candidates and static references. Strong leads are
 `g_power_plant_count` at `0x0042107d`, `g_power_consumed` at `0x00422152`,
 `SimulationClock` at `0x005c9f42`, `GetSimulationDate` at `0x007032ce`, and
 `LoadCity` at `0x007b217f`. These remain unverified until a function dossier or
 runtime/save correlation exists.
+
+### D3.7: private evidence pack (done)
+
+`tools/sc4_evidence_pack.py` packages the exact target identity, categorized
+static leads, REA evidence IDs, runtime prerequisites, and interpretation
+limits into a local-only artifact. The current pack retains 57 leads, including
+the visible treasury/date/population names. It does not write raw executable,
+memory, save, or extracted-resource data and refuses repository output paths.
 
 ### D4: power corpus (next after D3)
 

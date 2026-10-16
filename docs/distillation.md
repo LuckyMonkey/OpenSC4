@@ -171,9 +171,13 @@ subsystem and retain failed experiments as useful evidence.
   PE32/x86 artifacts. Native function analysis remains pending until a provider
   is configured; this does not count as a simulation observation.
 - **D3.6 candidate ledger partial:** Ghidra is healthy, but REA's native bridge
-  times out on this legacy PE. A local metadata-only fallback found 178 named
+  times out on this legacy PE. A local metadata-only fallback found 185 named
   candidates and static references for power, water, city statistics, date,
   and load paths. None are verified simulation state or writers.
+- **D3.7 evidence pack complete:** `tools/sc4_evidence_pack.py` packages the
+  exact target identity, 57 categorized leads, REA evidence IDs, runtime
+  prerequisites, and the interpretation/data boundary into a private local
+  artifact. It intentionally exports metadata, not proprietary bytes.
 - **D4 later:** POWER_001 through POWER_004 reference corpus, then held-out
   candidate evaluation.
 
