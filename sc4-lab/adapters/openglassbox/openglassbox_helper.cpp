@@ -4,6 +4,7 @@
 // protocol lives in openglassbox_sidecar.py; this helper deliberately uses a
 // tiny line protocol so the bridge has no third-party JSON dependency.
 
+#include "OpenGlassBox/CellsInRadius.hpp"
 #include "OpenGlassBox/DijkstraRouter.hpp"
 #include "OpenGlassBox/Path.hpp"
 #include "OpenGlassBox/Simulation.hpp"
@@ -241,6 +242,10 @@ public:
         // A commuter with no reachable free destination gives up after two
         // game hours instead of forty; it would never arrive anyway.
         config.routing.agentGiveUpTicks = 120u;
+        // Layer adds in distributed mode draw from CellsInRadius's global RNG,
+        // which is otherwise seeded from std::random_device: seed it so a run
+        // is reproducible.
+        ogb::CellsInRadius::setSeed(seed);
         m_simulation = std::make_unique<ogb::Simulation>(config);
         m_simulation->setPaused(false);
         m_cellSize = cellSize;

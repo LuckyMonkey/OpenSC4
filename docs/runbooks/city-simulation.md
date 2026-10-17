@@ -30,7 +30,7 @@ Replace each with a measured SC4 rule as the roadmap closes it.
 ## Run
 
 ```bash
-bash tools/build_openglassbox_adapter.sh --root /path/to/OpenGlassBox   # pinned fd7d918
+bash tools/build_openglassbox_adapter.sh --root /path/to/OpenGlassBox   # fd7d918, or fd7d918 + 7d3ae8e (faster, see below)
 godot --path .                     # open a city: the sim starts with it
 OPENSC4_SIM=0 godot --path .       # same, without simulating
 ```
@@ -51,7 +51,8 @@ godot --headless --path . res://tools/ExportCity.tscn -- /tmp/city.json   # cano
 ## Measured (Big City Tutorial, 3,427 buildings, 3,436 road links)
 
 - Model build + OpenGlassBox city init: about 5 s.
-- One game day: ~1.5 s in Godot (was 4.8–5.7 s before the culls below).
+- One game day: ~0.67 s in Godot with the OpenGlassBox layer optimization
+  below (~1.5 s on stock fd7d918; 4.8–5.7 s before any culls).
 - Morning and evening commuter waves of ~110 agents (1 agent = 100 people);
   ~2,500–2,800 road links carry traffic.
 - Air pollution approaches a steady state within ~10 days
@@ -101,10 +102,33 @@ only 0.11 s/day but changes the pollution map by 23 % at the hotspots.
 Pollution emission is ~75 %. 87 % of the emitted cell work comes from the 980
 industrial buildings, whose SC4 air-pollution radius is 13 or 16 tiles
 (365–545 cells per hourly add, plus the capacity check over the same diamond).
-These are real SC4 values, so the remaining speedup is inside OpenGlassBox's
-`Layer` radius operations (sum/add over chunked cells). The way forward that
-keeps behavior is an upstream OpenGlassBox optimization, proven by bit-identical
-pollution grids before/after.
+These are real SC4 values, so the speedup had to come from inside OpenGlassBox.
+
+### OpenGlassBox layer optimization (upstream candidate)
+
+Rule commands on layers use distributed adds, which touch about one cell. But
+before every add, the capacity check walks the whole diamond twice
+(`sumInRadius` + `walkCellsInRadius`), one hash-map block lookup per cell.
+Both results are order-independent, so OpenGlassBox commit `7d3ae8e`
+(branch `perf/layer-radius-ops` on top of `fd7d918`, local, not yet proposed
+upstream) walks the clipped diamond row by row: one block lookup per row
+segment, plus a closed-form count. Adds and removes keep `CellsInRadius`
+because their random start offset matters.
+
+Verification:
+
+- Same helper, same seed, stock vs patched library: grid, traffic and stats
+  hashes **identical** on every one of 3 days; stock is deterministic run to run.
+- 192,049 randomized brute-force checks of sum and count (radius 1–24,
+  clipped/offset regions, negative cells, empty blocks): 0 mismatches on both
+  libraries.
+- 1.06 → 0.44 s per helper day (×2.4); ~1.5 → ~0.67 s per day in Godot.
+- OpenGlassBox's own GoogleTest suite was not run here (`libgtest-dev` not
+  installed).
+
+Determinism fix in our helper: OpenGlassBox seeds `CellsInRadius`'s global RNG
+from `std::random_device`, so runs differed. The helper now calls
+`CellsInRadius::setSeed(seed)`, and the same city and seed reproduce exactly.
 
 ## Known limits
 
