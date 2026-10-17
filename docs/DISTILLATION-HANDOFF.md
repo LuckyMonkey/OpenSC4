@@ -112,6 +112,18 @@ underdetermined by 4 derivation months). See
 `docs/milestones/ogb-tax001-integration-v0.1.md` and the source-backed
 `docs/architecture/openglassbox-reuse-matrix.md`.
 
+### 3.6 Live UI window tree (region screen, read-only)
+
+`tools/sc4_ui_extract.py` reads SC4's GZWin objects from memory:
+`catalog` (271 .UI files, 5,673 windows), `discover`, `dump`. Object layout on
+this executable: +0x00 vtable, +0x10 window id, +0x14 runtime rect (l,t,r,b,
+parent-relative), +0x24 client rect (0,0,w,h), +0x4C parent, +0xB8 original
+.UI design rect, +0xC8 flags. On the region screen at 3840x1080 it recovers 77
+windows in one tree. SC4 centres the 1154-px top bar (x 1343..2497) and pins
+the name/population panel to the bottom edge (y 976..1082). Next: rebuild the
+region screen in Godot from this tree, then repeat in a city for the Universal
+Control Panel and tool menus.
+
 ## 4. What we observed but have not explained
 
 From the 20%-tax ride (2007-06 → 2010-11 in game, ~42 months):
