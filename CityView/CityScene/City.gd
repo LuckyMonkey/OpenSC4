@@ -20,6 +20,9 @@ var ind_layer
 # for cursor
 var cur_img
 var vec_hot
+var editor_panel : CityEditorPanel
+var transit_editor : MeshInstance3D
+var staged_road_edits : Array = []
 
 func _ready():
     rng.randomize()
@@ -29,7 +32,96 @@ func _ready():
     region_name = Boot.current_region_name
     create_terrain()
     set_cursor()
-    pass
+    _setup_city_editor()
+
+func _setup_city_editor():
+    transit_editor = $Node3D/TransitTiles
+    if transit_editor.has_signal("road_committed"):
+        transit_editor.road_committed.connect(_on_road_committed)
+    editor_panel = CityEditorPanel.new()
+    $UICanvas.add_child(editor_panel)
+    editor_panel.road_tool_changed.connect(_on_road_tool_changed)
+    editor_panel.save_copy_requested.connect(_on_save_copy_requested)
+    editor_panel.journal_requested.connect(_on_journal_requested)
+    editor_panel.road_save_requested.connect(_on_road_save_requested)
+    editor_panel.save_copy_selected.connect(_on_save_copy_selected)
+    editor_panel.journal_selected.connect(_on_journal_selected)
+    editor_panel.road_save_selected.connect(_on_road_save_selected)
+    editor_panel.return_requested.connect(_on_return_requested)
+    editor_panel.set_status("Loaded %s. Select Build road, then drag on the map." % city_name)
+
+func _on_road_tool_changed(enabled : bool):
+    if transit_editor != null:
+        transit_editor.set_build_tool_enabled(enabled)
+    if editor_panel != null:
+        editor_panel.set_status("Road tool active: drag from one tile to another." if enabled
+            else "Road tool stopped.")
+
+func _on_road_committed(tiles : Array):
+    staged_road_edits.append_array(tiles)
+    var count = staged_road_edits.size()
+    if editor_panel != null:
+        editor_panel.set_road_tile_count(count)
+        editor_panel.set_status("Staged %d road tiles. Export a baseline + journal when ready." % count,
+            true)
+
+func _journal_payload() -> Dictionary:
+    return CityEditJournal.document(city_path, city_name, region_name, staged_road_edits)
+
+func _on_save_copy_requested():
+    if editor_panel != null:
+        editor_panel.open_save_copy_dialog(city_path)
+
+func _on_journal_requested():
+    if editor_panel != null:
+        editor_panel.open_journal_dialog(city_path)
+
+func _on_road_save_requested():
+    if editor_panel != null:
+        editor_panel.open_road_save_dialog(city_path)
+
+func _on_save_copy_selected(path : String):
+    var result = CityEditJournal.safe_copy_with_journal(city_path, path, _journal_payload())
+    if result.has("error"):
+        editor_panel.set_status(result["error"], true)
+        return
+    editor_panel.set_status("Safe SC4 baseline written. Journal: %s" % result["journal"], true)
+    Log.info("City export: baseline %s; journal %s" % [result["sc4"], result["journal"]])
+
+func _on_journal_selected(path : String):
+    var result = CityEditJournal.write(path, _journal_payload())
+    if result != OK:
+        editor_panel.set_status("Could not write journal (error %d)" % result, true)
+        return
+    editor_panel.set_status("Road journal written: %s" % path, true)
+    Log.info("City edit journal: %s" % path)
+
+func _on_road_save_selected(path : String):
+    var result = SC4RoadWriter.export(savefile, staged_road_edits, path)
+    if result.has("error"):
+        editor_panel.set_status("SC4 road save refused: %s" % result["error"], true)
+        return
+    var journal = _journal_payload()
+    journal["replay_status"] = "dbpf_writer_v0_experimental"
+    journal["output_sc4"] = result["sc4"]
+    journal["writer"] = {
+        "version": "v0",
+        "road_records": result["road_records"],
+        "network_index_tiles": result["network_index_tiles"],
+    }
+    var journal_path = result["sc4"] + ".opensc4.json"
+    var journal_error = CityEditJournal.write(journal_path, journal)
+    if journal_error != OK:
+        editor_panel.set_status("SC4 written, but journal failed (error %d): %s" %
+            [journal_error, result["sc4"]], true)
+        return
+    editor_panel.set_status("Experimental SC4 road save written: %s" % result["sc4"], true)
+    Log.info("Experimental SC4 road save: %s; journal %s" % [result["sc4"], journal_path])
+
+func _on_return_requested():
+    if not staged_road_edits.is_empty():
+        Log.warn("Leaving city with %d staged road tiles; export the journal first if needed" % staged_road_edits.size())
+    get_tree().change_scene_to_file("res://Region.tscn")
 
 func gen_random_terrain(width : int, height : int) -> Array:
     var heightmap : Array = []
@@ -545,6 +637,8 @@ func load_networks():
     var idx = nindex[0]
     var nsub = savefile.get_subfile(idx.type_id, idx.group_id, idx.instance_id, NetworkSubfile)
     network_tiles = nsub.tiles
+    if $Node3D/TransitTiles != null:
+        $Node3D/TransitTiles.initialize_saved_network_tiles(network_tiles)
     Log.info("Network subfile: %d tiles, %d layout failures, types %s"
         % [network_tiles.size(), nsub.layout_failures, nsub.type_histogram()])
 

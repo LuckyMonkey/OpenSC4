@@ -37,6 +37,18 @@ const APPEARANCE_PRESENT : int = 0x01
 const APPEARANCE_BURNT : int = 0x40
 
 class NetworkTile:
+    # Original serialized record and offsets are retained for the future
+    # writer. Keeping the source bytes lets us patch a cloned SC4 road tile
+    # without guessing at its variable-length SGProps/unknown fields.
+    var raw_record : PackedByteArray
+    var record_mem : int
+    var record_crc : int
+    var record_major : int
+    var record_minor : int
+    var position_offset : int
+    var vertices_offset : int
+    var crossings_offset : int
+    var bbox_offset : int
     var network_type : int        # index into NETWORK_TYPE_NAMES
     var appearance : int          # bit flags, see APPEARANCE_*
     var texture_id : int          # FSH family for the network surface
@@ -93,6 +105,11 @@ func _read_tile(buf : StreamPeerBuffer, pos : int):
     buf.seek(pos)
     var header = _read_record_header(buf)
     var tile = NetworkTile.new()
+    tile.raw_record = raw_data.slice(pos, pos + header.size)
+    tile.record_mem = header.mem
+    tile.record_crc = header.crc
+    tile.record_major = header.major
+    tile.record_minor = header.minor
 
     buf.get_u16()                     # zot
     buf.get_u8()                      # unknown
@@ -106,7 +123,9 @@ func _read_tile(buf : StreamPeerBuffer, pos : int):
     tile.exemplar_tgi = [buf.get_u32(), buf.get_u32(), buf.get_u32()]  # group, type, instance
     buf.get_u8()                      # unknown
 
+    tile.position_offset = buf.get_position() - pos
     tile.position = Vector3(buf.get_float(), buf.get_float(), buf.get_float())
+    tile.vertices_offset = buf.get_position() - pos
     tile.vertices = [_read_vertex(buf), _read_vertex(buf), _read_vertex(buf), _read_vertex(buf)]
 
     tile.texture_id = buf.get_u32()
@@ -117,6 +136,7 @@ func _read_tile(buf : StreamPeerBuffer, pos : int):
 
     # The crossing count is stored one less than the real count; the first
     # crossing carries the tile's own network type and its WNES connections.
+    tile.crossings_offset = buf.get_position() - pos
     var crossing_count = buf.get_u8() + 1
     for _i in range(crossing_count):
         tile.crossings.append({
@@ -132,6 +152,7 @@ func _read_tile(buf : StreamPeerBuffer, pos : int):
     for _i in range(wall_count):
         tile.walls.append({"texture": buf.get_u32(), "vertex": _read_vertex(buf)})
 
+    tile.bbox_offset = buf.get_position() - pos
     tile.bbox = _read_bbox(buf, true)  # this family groups the bbox by axis
     tile.construction_states = buf.get_u32()
     tile.alternate_path_id = buf.get_u32()

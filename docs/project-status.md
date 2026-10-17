@@ -1,6 +1,6 @@
 # Project status
 
-Snapshot: 2026-10-16. This is a working status document, not a compatibility
+Snapshot: 2026-10-17. This is a working status document, not a compatibility
 claim.
 
 ## Verified today
@@ -32,6 +32,7 @@ claim.
 | SC4 tax path | First native distillation milestone | Proven rate storage/getter/setter and tax-income writer boundary; full taxable-base formula pending |
 | SC4 budget telemetry | Implemented, live capture | Authoritative funds/tax-rate/category-total probe; 45-sample while-playing transition captured |
 | SC4 system identification | Tooling milestone | Read-only series capture, paired finite differences, replicate aggregation, guarded tax intervention, response summaries, and controlled-run plans; first paired tax run pending |
+| Godot road editor/save path | Parser gate passed, retail SC4 gate pending | In-city road tool, safe baseline+journal export, structured network-index decode, and fail-closed experimental Road DBPF writer |
 
 ## Current strengths
 
@@ -49,6 +50,10 @@ claim.
   game paths or game contents.
 - The backend seam now supports validation, bounded event history, save schema,
   and backend fingerprints without coupling to OpenGlassBox.
+- A city can now stage road edits in Godot and emit an experimental new `.sc4`
+  file for one narrow case: a simple Road into an empty tile. The generated
+  file reopens in OpenSC4 with coherent network records; retail SC4 load/save
+  validation is still pending.
 
 ## Known risks
 
@@ -94,6 +99,9 @@ claim.
   mapping and the taxable-base function remain open.
 - OpenGlassBox has its own simulation concepts and a dual GPL/commercial
   licensing policy; dependency review is required before distribution.
+- The experimental road writer intentionally rejects occupied tiles and complex
+  network types. A parser-valid DBPF is not yet proof that SimCity 4 accepts the
+  new road or recomputes traffic/simulation state correctly.
 
 ## Definition of progress
 

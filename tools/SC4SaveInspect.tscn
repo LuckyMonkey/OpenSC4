@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://sc4saveinspect1"]
+
+[ext_resource type="Script" path="res://tools/sc4_save_inspect.gd" id="1"]
+
+[node name="SC4SaveInspect" type="Node"]
+script = ExtResource("1")

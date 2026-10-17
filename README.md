@@ -62,6 +62,8 @@ Godot clone of SimCity4
 - [OpenGlassBox bridge runbook](docs/runbooks/openglassbox-bridge.md)
 - [Development iteration and Git sync](docs/runbooks/iteration.md)
 - [Simulation backend seam](docs/runbooks/simulation-backend.md)
+- [Godot city road round-trip](docs/runbooks/city-road-roundtrip.md)
+- [City road round-trip milestone](docs/milestones/city-road-roundtrip-v0.1.md)
 - [Future work and wishlist](docs/future-work.md)
 - [Baseline milestone report](docs/milestones/lab-baseline-v0.2.md)
 - [Distillation D1 milestone](docs/milestones/distillation-d1.md)

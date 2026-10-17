@@ -1,5 +1,6 @@
 extends MeshInstance3D
 
+signal road_committed(tiles: Array)
 
 var mat = self.get_material_override()
 var textarr = false
@@ -17,6 +18,8 @@ var layer_map = []
 var map_width : int
 var map_height : int
 var drag_first = true
+var build_tool_enabled : bool = false
+const ROAD_NETWORK_TYPES : Array = [0, 3, 6, 10, 11]
 #input
 var start_l = false
 var hold_l = false
@@ -141,7 +144,13 @@ func _ready():
     self.set_material_override(mat)
     
 func _input(event):
+    if not build_tool_enabled:
+        return
     if event is InputEventMouseButton:
+        # The city editor panel lives above the 3D view. Do not start a road
+        # drag when the user is pressing one of its controls.
+        if event.is_pressed() and get_viewport().gui_get_hovered_control() != null:
+            return
         if event.is_pressed():
             if event.button_index == 1:
                 self.start_l = self.mouse_ray()
@@ -160,6 +169,59 @@ func _input(event):
             self.drag_first = not self.drag_first
             if self.start_l:
                 self._drag_network(self.start_l, self.hold_l, "Road")
+
+func set_build_tool_enabled(enabled : bool):
+    build_tool_enabled = enabled
+    if not enabled:
+        start_l = false
+        hold_l = false
+        drag_tiles = {}
+        drag_arrays = []
+        var preview = get_child(0).mesh if get_child_count() > 0 else null
+        if preview != null:
+            get_child(0).mesh = null
+
+# Seed the editor's topology view from the decoded SC4 ground-network records.
+# Rendering still comes from City.gd; this lightweight map is only used by the
+# RUL drag solver to preserve existing intersections while a new road is drawn.
+func initialize_saved_network_tiles(saved_tiles : Array):
+    network_tiles.clear()
+    for tile in saved_tiles:
+        if not tile.is_present() or not ROAD_NETWORK_TYPES.has(tile.network_type):
+            continue
+        if tile.crossings.is_empty():
+            continue
+        var crossing = tile.crossings[0]
+        var location = Vector2(tile.tile_x(), tile.tile_z())
+        var edges = [crossing["west"], crossing["north"], crossing["east"], crossing["south"]]
+        network_tiles[location] = NetTile.new(location, edges, null, Vector2.ZERO)
+
+func _serialize_drag_tiles() -> Array:
+    var result : Array = []
+    var heightmap = get_parent().get_node("Terrain").heightmap
+    for location in drag_tiles.keys():
+        var tile : NetTile = drag_tiles[location]
+        result.append({
+            "x": int(tile.locations.x),
+            "z": int(tile.locations.y),
+            "y_m": _tile_height_m(tile.locations, heightmap),
+            "edges": tile.edges.duplicate(),
+            "network": "Road",
+        })
+    result.sort_custom(func(a, b):
+        if a["z"] == b["z"]:
+            return a["x"] < b["x"]
+        return a["z"] < b["z"]
+    )
+    return result
+
+func _tile_height_m(location : Vector2, heightmap : Array) -> float:
+    if heightmap.is_empty():
+        return 0.0
+    var x = clamp(int(location.x), 0, heightmap[0].size() - 2)
+    var z = clamp(int(location.y), 0, heightmap.size() - 2)
+    return (float(heightmap[z][x]) + float(heightmap[z][x + 1]) +
+        float(heightmap[z + 1][x]) + float(heightmap[z + 1][x + 1])) / 4.0
         
 
 func mouse_ray():
@@ -634,9 +696,8 @@ func _drag_network(start, end, type):
     """
     
 func _build_network():#start, end, type):
-    "TODO Register tiles to network_tiles and figure out how to copy PackedVector3Array"
+    var committed_tiles = _serialize_drag_tiles()
     if len(self.drag_arrays[ArrayMesh.ARRAY_VERTEX]) > 0:
-        var debug = false
         if self.mesh == null:
             self.mesh = ArrayMesh.new()
         if len(self.built_arrays) == 0:
@@ -669,7 +730,10 @@ func _build_network():#start, end, type):
             self.mesh.surface_remove(0)
         self.mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, get_mesh_arrays(self.built_arrays))
     self.drag_arrays = []
-    self.get_child(0).mesh.surface_remove(0)
+    if get_child_count() > 0:
+        # The preview mesh is optional; a click without a valid terrain hit
+        # must not turn into a null-instance crash.
+        get_child(0).mesh = null
     for key in self.drag_tiles.keys():
         self.network_tiles[key] = self.drag_tiles[key]
     self.drag_tiles = {}
@@ -681,6 +745,8 @@ func _build_network():#start, end, type):
         else:
             for k in range(6):
                 self.built_tracker[found+k] = self.drag_tracker[j+k]
+    if not committed_tiles.is_empty():
+        road_committed.emit(committed_tiles)
 
 func get_mesh_arrays(arrays):
     var ret_array = []
