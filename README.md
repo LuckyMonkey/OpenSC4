@@ -48,6 +48,7 @@ Godot clone of SimCity4
 
 ## Developer documentation
 
+- **[Distillation handoff, runbook, roadmap](docs/DISTILLATION-HANDOFF.md)** — start here for SC4 simulation research
 - [Project status](docs/project-status.md)
 - [Roadmap and milestones](docs/roadmap.md)
 - [Architecture and simulation seams](docs/architecture.md)
