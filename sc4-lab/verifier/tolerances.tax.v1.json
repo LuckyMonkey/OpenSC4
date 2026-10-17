@@ -1,0 +1,7 @@
+{
+  "schema": "sc4-lab.tolerances.v1",
+  "default": null,
+  "metrics": {
+    "tax_income": {"mode": "exact"}
+  }
+}
