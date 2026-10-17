@@ -36,6 +36,8 @@ from memory_observatory import ObservatoryError, open_memory, process_identity
 SERIES_SCHEMA = "sc4-lab.sc4-system-id-series.v1"
 ANALYSIS_SCHEMA = "sc4-lab.sc4-system-id-analysis.v1"
 PLAN_SCHEMA = "sc4-lab.sc4-system-id-plan.v1"
+BOUNDARY_SCHEMA = "sc4-lab.sc4-system-id-boundaries.v1"
+BOUNDARY_METRICS = ("funds_public", "funds_working_candidate", "tax_income", "tax_category_total_sum")
 
 
 class SystemIdError(Exception):
@@ -457,6 +459,148 @@ def plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def boundary_report(series: list[dict[str, Any]], metrics: list[str], pause_samples: int) -> dict[str, Any]:
+    """Correlate native date-serial steps with budget-field changes in one series."""
+    if len(series) < 2:
+        raise SystemIdError("boundary analysis needs at least two samples")
+    serials = []
+    for item in series:
+        value = item.get("metrics", {}).get("simulation_date_serial")
+        if value is None:
+            raise SystemIdError(f"sample {item.get('sample_index')} has no simulation_date_serial; capture with --with-clock")
+        serials.append(int(value))
+
+    date_steps: list[dict[str, Any]] = []
+    metric_changes: list[dict[str, Any]] = []
+    stationary_runs: list[dict[str, Any]] = []
+    run_start = 0
+    for index in range(1, len(series)):
+        before, after = series[index - 1], series[index]
+        step = serials[index] - serials[index - 1]
+        if step != 0:
+            old = sc4_clock_probe.decode_native_date(serials[index - 1])
+            new = sc4_clock_probe.decode_native_date(serials[index])
+            date_steps.append(
+                {
+                    "sample_index": after.get("sample_index", index),
+                    "elapsed_seconds": after.get("elapsed_seconds"),
+                    "serial_before": serials[index - 1],
+                    "serial_after": serials[index],
+                    "serial_step": step,
+                    "date_before": old,
+                    "date_after": new,
+                    "month_rollover": (old["year"], old["month"]) != (new["year"], new["month"]),
+                    "year_rollover": old["year"] != new["year"],
+                }
+            )
+            if index - run_start >= pause_samples:
+                stationary_runs.append(
+                    {"first_sample": run_start, "last_sample": index - 1, "samples": index - run_start, "serial": serials[run_start]}
+                )
+            run_start = index
+        for metric in metrics:
+            left = before.get("metrics", {}).get(metric)
+            right = after.get("metrics", {}).get(metric)
+            if left is None or right is None or left == right:
+                continue
+            metric_changes.append(
+                {
+                    "sample_index": after.get("sample_index", index),
+                    "metric": metric,
+                    "before": left,
+                    "after": right,
+                    "delta": numeric(right, metric) - numeric(left, metric),
+                    "coincides_with_date_step": step != 0,
+                    "coincides_with_month_rollover": bool(step) and date_steps[-1]["month_rollover"],
+                }
+            )
+    if len(series) - run_start >= pause_samples:
+        stationary_runs.append(
+            {"first_sample": run_start, "last_sample": len(series) - 1, "samples": len(series) - run_start, "serial": serials[run_start]}
+        )
+
+    backwards = [step for step in date_steps if step["serial_step"] < 0]
+    per_metric: dict[str, Any] = {}
+    for metric in metrics:
+        changes = [item for item in metric_changes if item["metric"] == metric]
+        per_metric[metric] = {
+            "changes": len(changes),
+            "on_date_step": sum(item["coincides_with_date_step"] for item in changes),
+            "on_month_rollover": sum(item["coincides_with_month_rollover"] for item in changes),
+            "off_boundary": sum(not item["coincides_with_date_step"] for item in changes),
+        }
+    month_rollovers = sum(step["month_rollover"] for step in date_steps)
+    checks = {
+        "serial_monotonic": not backwards,
+        "pause_observed": bool(stationary_runs),
+        "advance_observed": bool(date_steps),
+        "month_rollover_observed": month_rollovers > 0,
+        "budget_change_on_month_rollover": any(item["coincides_with_month_rollover"] for item in metric_changes),
+    }
+    return {
+        "schema": BOUNDARY_SCHEMA,
+        "created_utc": utc_now(),
+        "experiment_id": series[0].get("experiment_id"),
+        "run_id": series[0].get("run_id"),
+        "samples": len(series),
+        "serial_range": [min(serials), max(serials)],
+        "date_steps": date_steps,
+        "serial_step_sizes": sorted({step["serial_step"] for step in date_steps}),
+        "month_rollovers": month_rollovers,
+        "stationary_runs": stationary_runs,
+        "metric_changes": metric_changes,
+        "per_metric": per_metric,
+        "gate_checks": checks,
+        "interpretation": {
+            "status": "boundary_correlation",
+            "sampling_caveat": "changes are attributed to the sampling interval, not an exact tick",
+            "tick_claim": False,
+            "equivalence_claim": False,
+        },
+    }
+
+
+def boundaries(args: argparse.Namespace) -> int:
+    if args.pause_samples < 2:
+        raise SystemIdError("--pause-samples must be at least 2")
+    result = boundary_report(read_series(args.series), args.metric or list(BOUNDARY_METRICS), args.pause_samples)
+    write_json(args.out, result)
+    print(json.dumps({"out": str(args.out), "date_steps": len(result["date_steps"]), "gate_checks": result["gate_checks"]}))
+    return 0
+
+
+def boundary_self_test() -> int:
+    base = sc4_clock_probe_serial_for_test()
+    serials = [base, base, base, base + 1, base + 2, base + 2, base + 2, base + 3]
+    funds = [100, 100, 100, 100, 250, 250, 240, 240]
+    series = [
+        {"experiment_id": "self-test", "run_id": "t", "sample_index": i, "elapsed_seconds": float(i),
+         "metrics": {"simulation_date_serial": s, "funds_public": f}}
+        for i, (s, f) in enumerate(zip(serials, funds))
+    ]
+    report = boundary_report(series, ["funds_public"], 3)
+    assert report["serial_step_sizes"] == [1], report["serial_step_sizes"]
+    assert len(report["stationary_runs"]) == 2, report["stationary_runs"]
+    assert report["per_metric"]["funds_public"] == {"changes": 2, "on_date_step": 1, "on_month_rollover": 1, "off_boundary": 1}, report["per_metric"]
+    assert all(report["gate_checks"].values()), report["gate_checks"]
+    try:
+        boundary_report(series[:1], ["funds_public"], 3)
+    except SystemIdError:
+        pass
+    else:
+        raise AssertionError("single-sample series accepted")
+    print("SC4 SYSTEM ID BOUNDARY SELF-TEST PASSED")
+    return 0
+
+
+def sc4_clock_probe_serial_for_test() -> int:
+    """Return a serial whose next value is the first day of a month."""
+    serial = 0x25B6DB
+    while sc4_clock_probe.decode_native_date(serial + 2)["day"] != 1:
+        serial += 1
+    return serial
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     sub = root.add_subparsers(dest="command", required=True)
@@ -506,6 +650,14 @@ def parser() -> argparse.ArgumentParser:
     plan_parser.add_argument("--interval", type=float, default=2.0)
     plan_parser.add_argument("--metric", action="append")
     plan_parser.add_argument("--out", type=Path, required=True)
+
+    boundary_parser = sub.add_parser("boundaries", help="correlate date-serial steps with budget changes")
+    boundary_parser.add_argument("--series", type=Path, required=True)
+    boundary_parser.add_argument("--metric", action="append")
+    boundary_parser.add_argument("--pause-samples", type=int, default=3)
+    boundary_parser.add_argument("--out", type=Path, required=True)
+
+    sub.add_parser("self-test", help="run the synthetic boundary-analysis check")
     return root
 
 
@@ -518,6 +670,10 @@ def main() -> int:
             return analyze(args)
         if args.command == "aggregate":
             return aggregate(args)
+        if args.command == "boundaries":
+            return boundaries(args)
+        if args.command == "self-test":
+            return boundary_self_test()
         return plan(args)
     except (OSError, ObservatoryError, SystemIdError, ValueError) as exc:
         print(f"SC4 SYSTEM ID FAILED: {exc}", file=sys.stderr)

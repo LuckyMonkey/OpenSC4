@@ -7,7 +7,7 @@ functions, alter saves, or upload data.
 
 ## Current milestone
 
-`tools/sc4_system_id.py` provides four operations:
+`tools/sc4_system_id.py` provides five operations (plus `self-test`):
 
 - `plan`: create a factor plan without fabricating observations;
 - `capture`: record a live budget series using the verified budget probe;
@@ -15,7 +15,10 @@ functions, alter saves, or upload data.
 - `analyze`: pair two series by sample index and calculate finite-difference
   sensitivities, discrete response derivatives, and response area;
 - `aggregate`: combine repeated paired analyses by intervention value and
-  report replicate variance and sign consistency.
+  report replicate variance and sign consistency;
+- `boundaries`: on one `--with-clock` series, list date-serial steps, month
+  and year rollovers, paused (stationary) runs, and whether each budget-field
+  change landed on a date step, a month rollover, or off-boundary.
 
 The current telemetry exposes funds, tax income, tax rates, and tax category
 totals. `tools/sc4_clock_probe.py` now exposes a native simulation-date
@@ -201,6 +204,27 @@ Do not promote a fitted curve or correlation to a behavioral rule until:
   response, but does not isolate a causal subsystem by itself.
 - One process session is not enough to establish restart or save/reload
   stability.
+
+## Date-boundary promotion run
+
+Covers promotion-gate items 1 (pause → run → pause) and 4 (date transition
+correlated with the budget probe) from `docs/milestones/sc4-clock-distillation-v0.1.md`.
+Use a disposable city. Start the capture paused, unpause at fastest speed for
+at least two in-game month ends, then pause again before the capture ends:
+
+```bash
+pid=$(pgrep -n -f 'SimCity 4.exe')
+python3 tools/sc4_system_id.py capture --pid "$pid" --with-clock \
+  --experiment-id date-boundary --phase baseline \
+  --duration 240 --interval 0.5 --out /tmp/opensc4-date-boundary.jsonl
+python3 tools/sc4_system_id.py boundaries \
+  --series /tmp/opensc4-date-boundary.jsonl --out /tmp/opensc4-date-boundary.json
+```
+
+The summary prints `gate_checks`. All five should be `true`; the
+`per_metric` block then shows whether `funds_public`/`tax_income` change only
+on month rollovers (expected monthly budget pass) or also off-boundary.
+Check the analysis with `python3 tools/sc4_system_id.py self-test`.
 
 ## Next implementation milestones
 

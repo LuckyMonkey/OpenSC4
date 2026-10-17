@@ -104,5 +104,7 @@ after the same serial/date relationship survives:
 5. an independently recorded executable hash.
 
 The next experiment should use the current read-only clock and budget probes
-together. Do not add a simulation tick field to the shared observation schema
+together: `tools/sc4_system_id.py capture --with-clock` followed by
+`tools/sc4_system_id.py boundaries` checks items 1 and 4 in one run (see
+`docs/runbooks/sc4-system-identification.md`, "Date-boundary promotion run"). Do not add a simulation tick field to the shared observation schema
 until a separate native tick/update counter is found.
