@@ -213,12 +213,15 @@ Use a disposable city. Start the capture paused, unpause at fastest speed for
 at least two in-game month ends, then pause again before the capture ends:
 
 ```bash
-pid=$(pgrep -n -f 'SimCity 4.exe')
+# Under Proton, match the Wine-side path; a bare 'SimCity 4.exe' match hits
+# Steam's launch wrappers instead of the game.
+pid=$(pgrep -f 'S:\\steamapps\\common\\SimCity 4 Deluxe\\Apps\\SimCity 4.exe')
 python3 tools/sc4_system_id.py capture --pid "$pid" --with-clock \
   --experiment-id date-boundary --phase baseline \
   --duration 240 --interval 0.5 --out /tmp/opensc4-date-boundary.jsonl
 python3 tools/sc4_system_id.py boundaries \
-  --series /tmp/opensc4-date-boundary.jsonl --out /tmp/opensc4-date-boundary.json
+  --series /tmp/opensc4-date-boundary.jsonl --pause-samples 20 \
+  --out /tmp/opensc4-date-boundary.json
 ```
 
 The summary prints `gate_checks`. All five should be `true`; the

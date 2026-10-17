@@ -83,14 +83,37 @@ python3 tools/sc4_clock_probe.py --self-test
   the observed positive serial range.
 - The same session yielded a stable, structured live value without UI parsing.
 
+## Date-boundary run (2026-10-17)
+
+One read-only capture (`sc4_system_id.py capture --with-clock`, 481 samples
+at 0.5 s, fastest speed, disposable city) followed by `boundaries`:
+
+- Serial advanced 2453838 → 2453969 (2006-04-12 → 2006-08-02) and never went
+  backwards. At fastest speed one 0.5 s sample covered 1–10 serial units.
+- Paused before (89 samples) and after (365 samples) the run: the serial was
+  constant throughout both. Short 3–4-sample flat runs mid-run are slow
+  advance, not pauses; `--pause-samples` should scale with `--interval`.
+- Four month rollovers were observed (May, June, July, August). Every change to
+  `funds_public`, `funds_working_candidate`, `tax_income`, and
+  `tax_category_total_sum` (4 each) landed in the same sample as a month
+  rollover; none were off-boundary. This is consistent with a monthly budget
+  pass driven by the same calendar, attributed to a 0.5 s sampling interval,
+  not an exact tick.
+- All five `gate_checks` were `true`. Live output stayed outside Git.
+
+Promotion gate items 1 and 4 are therefore satisfied for this session.
+Items 2 (save/reload), 3 (fresh process), and 5 (recorded executable hash)
+remain open.
+
 ## What is not established
 
 - The simulation tick or wall-clock-to-simulation-speed mapping.
-- Whether the date serial advances once per simulation day, month, or another
-  internal boundary under each speed setting.
+- The serial's unit is consistent with one day (the decoded calendar matches
+  day-by-day steps), but per-speed advance rates were not measured.
 - Save/reload preservation of the serial and object resolution.
 - Restart rediscovery across a new process.
-- Whether budget/tax writers run on the same boundary as the date serial.
+- Exactly where inside a month rollover the budget writer runs (sampling only
+  bounds it to the same 0.5 s interval).
 
 ## Promotion gate
 

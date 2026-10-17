@@ -31,7 +31,7 @@ claim.
 | Live SC4 hashed capture | First runtime milestone | 859 launch regions, 913 city regions, 143 transition changes |
 | SC4 tax path | Native distillation v0.2 | Proven rate storage/getter/setter, twelve-category accumulator loop, conversion helper boundary, and tax-income writer; table meanings and taxable-base inputs pending |
 | SC4 budget telemetry | Implemented, live capture | Authoritative funds/tax-rate/category-total probe; 45-sample while-playing transition captured |
-| SC4 simulation date | Native runtime candidate v0.1 | Clock service/object path and integer calendar helper recovered; live serial/date capture works, restart/save/tick promotion pending |
+| SC4 simulation date | Native runtime candidate v0.1 | Clock service/object path and integer calendar helper recovered; pause/run and month-rollover budget correlation passed 2026-10-17; save/reload, restart, and exe-hash promotion pending |
 | SC4 system identification | Tooling milestone | Read-only series capture, paired finite differences, replicate aggregation, guarded tax intervention, response summaries, and controlled-run plans; first paired tax run pending |
 | Godot road editor/save path | Parser gate passed, retail SC4 gate pending | In-city road tool, safe baseline+journal export, structured network-index decode, and fail-closed experimental Road DBPF writer |
 
