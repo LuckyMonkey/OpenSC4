@@ -166,13 +166,28 @@ Add a tiny deterministic backend for API tests: buildings, resource stocks,
 power supply/demand, monthly ticks, and serialization. This tests the seam
 without pretending to match SC4.
 
-### E3: OpenGlassBox adapter (next)
+### E3: OpenGlassBox adapter (done, sidecar v0.1)
 
 Pin an external OpenGlassBox commit and expose it through a narrow C++ bridge.
-The first implementation should speak the sidecar protocol before a GDExtension
-is attempted. Do not vendor a large source snapshot into the Godot project.
+The first implementation now speaks the sidecar protocol through a Python
+JSON-line process and a small C++ helper. It creates a real OpenGlassBox city,
+roads, nodes, segments, fixed-tick clock state, and bridge save/load without
+vendoring the external source tree.
 
-### E4: SC4-compatible backend (later)
+### E3.5: Godot sidecar client (done, smoke only)
+
+`OpenGlassBoxSidecarBackend` launches the sidecar and maps hello/reset,
+commands, advancement, snapshots, events, and save/load to the plain
+`SimulationBackend` contract. The headless smoke path passes. It is not yet
+selected by the city UI and still uses a bridge-specific straight-road slice.
+
+### E4: Native OpenGlassBox integration (later)
+
+Replace the JSON process boundary with a narrow GDExtension only after the
+sidecar lifecycle and ownership behavior have been exercised by the Godot
+runtime.
+
+### E5: SC4-compatible backend (later)
 
 Add compatibility behavior behind the same interface only after reference
 observations exist.

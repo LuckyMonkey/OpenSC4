@@ -60,6 +60,7 @@ Godot clone of SimCity4
 - [Reference capture tool](tools/reference_capture.py)
 - [Memory observatory runbook](docs/runbooks/memory-observatory.md)
 - [OpenGlassBox bridge runbook](docs/runbooks/openglassbox-bridge.md)
+- [OpenGlassBox sidecar milestone](docs/milestones/openglassbox-sidecar-v0.1.md)
 - [Development iteration and Git sync](docs/runbooks/iteration.md)
 - [Simulation backend seam](docs/runbooks/simulation-backend.md)
 - [Godot city road round-trip](docs/runbooks/city-road-roundtrip.md)
