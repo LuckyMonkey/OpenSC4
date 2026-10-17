@@ -126,10 +126,20 @@ def main() -> int:
 
     final_snapshot = advance["snapshot"]
     metric_names = scenario.get("metrics", [])
+    backend_id = str(hello.get("backend_id", "unknown"))
+    if backend_id.startswith("openglassbox-"):
+        provenance_kind = "candidate-openglassbox"
+        metric_unit = "backend"
+    elif backend_id.startswith("synthetic-"):
+        provenance_kind = "synthetic-protocol-fixture"
+        metric_unit = "synthetic"
+    else:
+        provenance_kind = "candidate-protocol-adapter"
+        metric_unit = "backend"
     metrics: dict[str, dict[str, Any]] = {}
     for name in metric_names:
         if name in final_snapshot:
-            metrics[name] = {"status": "observed", "value": final_snapshot[name], "unit": "synthetic"}
+            metrics[name] = {"status": "observed", "value": final_snapshot[name], "unit": metric_unit}
         else:
             metrics[name] = {"status": "unsupported", "value": None, "unit": "unknown"}
 
@@ -141,10 +151,10 @@ def main() -> int:
             "simulation_tick": final_snapshot.get("simulation_tick"),
             "event_cursor": final_snapshot.get("event_cursor"),
         },
-        "backend_id": hello.get("backend_id"),
+        "backend_id": backend_id,
         "metrics": metrics,
         "provenance": {
-            "kind": "synthetic-protocol-fixture",
+            "kind": provenance_kind,
             "reference_claim": False,
         },
         "events_observed": len(events.get("events", [])),

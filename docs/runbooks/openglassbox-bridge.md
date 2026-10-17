@@ -7,6 +7,12 @@ layers, buildings, agents, paths, fixed ticks, and save concepts. OpenSC4 is a
 Godot/GDScript application. This is an interface-integration task, not a
 source-tree merge.
 
+The first real sidecar is now implemented in
+`sc4-lab/adapters/openglassbox/`. It uses a Python JSON-line protocol process
+and a small C++ helper linked against the pinned external library. See
+`docs/milestones/openglassbox-sidecar-v0.1.md` for the exact build and probe
+commands.
+
 ## Pin and build
 
 Keep the checkout outside OpenSC4 and record its exact commit:
@@ -28,10 +34,11 @@ available. Do not install packages as part of a normal OpenSC4 regression run.
 1. Write the plain-data OpenSC4 `SimulationBackend` contract.
 2. Implement a tiny deterministic fake backend and tests against the contract.
 3. Prototype OpenGlassBox in a standalone adapter or JSON-line sidecar using
-   `sc4-lab/adapters/PROTOCOL.md`.
+   `sc4-lab/adapters/PROTOCOL.md`. **Done for a real road-and-clock slice.**
 4. Define ownership, fixed-tick advancement, event cursors, snapshots, errors,
    backend fingerprints, and save schemas.
-5. Build a small GDExtension that exposes only the contract.
+5. Add a Godot `SimulationBackend` client for the sidecar, then build a small
+   GDExtension that exposes only the contract.
 6. Add city rendering integration after lifecycle/shutdown tests pass.
 
 Do not expose OpenGlassBox pointers or ruleset-specific classes to GDScript.

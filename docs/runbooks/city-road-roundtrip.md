@@ -70,5 +70,7 @@ use a fresh output path, and fail closed when the network index format is not
 known well enough to rebuild. The current writer has reached the parser gate:
 the generated probe output reopens with 358 ground-network tiles, 562
 network-index tiles, zero network layout failures, and a complete structured
-index decode. This is necessary but not sufficient evidence that retail SC4
+index decode. A disposable candidate was also staged as a new city in a
+separate region folder for the retail load gate; no retail acceptance claim has
+been made yet. This is necessary but not sufficient evidence that retail SC4
 will accept the file.

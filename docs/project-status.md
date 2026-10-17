@@ -14,7 +14,7 @@ claim.
 | Region UI placement | Implemented, visual retest pending | Layout-derived legacy canvas is bottom-left anchored |
 | Simulation seam | Contract + synthetic backend smoke test | No SC4 behavior has been measured or claimed |
 | SC4 reference adapter | Not implemented | No reference observations are committed |
-| OpenGlassBox bridge | Not implemented | External library builds; no Godot ABI boundary yet |
+| OpenGlassBox bridge | Real sidecar v0.1 | External library is exercised through the JSON-line contract; Godot runtime client pending |
 | Performance probe | Implemented | Windowed startup/pan/view timing tool |
 | Parser fixture smoke | Implemented | Synthetic malformed-record and UI-bound tests |
 | Spatial batching | Opt-in experiment | `OPENSC4_SPATIAL_BATCHES=1` |
@@ -54,6 +54,9 @@ claim.
   file for one narrow case: a simple Road into an empty tile. The generated
   file reopens in OpenSC4 with coherent network records; retail SC4 load/save
   validation is still pending.
+- A real external OpenGlassBox `Simulation` now runs behind the adapter seam,
+  with road creation, fixed-tick advancement, snapshots, and bridge save/load.
+  This is a candidate backend integration milestone, not SC4 behavior.
 
 ## Known risks
 
@@ -99,6 +102,9 @@ claim.
   mapping and the taxable-base function remain open.
 - OpenGlassBox has its own simulation concepts and a dual GPL/commercial
   licensing policy; dependency review is required before distribution.
+- The OpenGlassBox sidecar currently has a bounded integration slice: straight
+  roads and clock state only. Its event history is not yet persistent and it
+  is not selected by the Godot city UI.
 - The experimental road writer intentionally rejects occupied tiles and complex
   network types. A parser-valid DBPF is not yet proof that SimCity 4 accepts the
   new road or recomputes traffic/simulation state correctly.
