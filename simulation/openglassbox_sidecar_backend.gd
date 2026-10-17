@@ -8,6 +8,9 @@ extends SimulationBackend
 ## the SimulationBackend contract.
 
 var _stdio : FileAccess
+# Kept open for the process lifetime: a freed stderr pipe would close its read
+# end and SIGPIPE the sidecar on its first diagnostic line.
+var _stderr : FileAccess
 var _pid := -1
 var _request_id := 0
 var _hello : Dictionary = {}
@@ -45,6 +48,7 @@ func start(sidecar_path : String, helper_path : String = "") -> bool:
         push_error("Could not start OpenGlassBox sidecar: %s" % process)
         return false
     _stdio = process["stdio"]
+    _stderr = process.get("stderr", null)
     _pid = int(process.get("pid", -1))
     var result := _request("hello", {})
     if not bool(result.get("ok", false)):
@@ -59,6 +63,9 @@ func stop() -> void:
     if is_instance_valid(_stdio):
         _stdio.close()
     _stdio = null
+    if is_instance_valid(_stderr):
+        _stderr.close()
+    _stderr = null
     _pid = -1
 
 func is_running() -> bool:

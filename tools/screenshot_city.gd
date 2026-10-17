@@ -46,12 +46,16 @@ func _ready():
     var city_name = DEFAULT_CITY
     var shots : Array = []
     var show_pipes = false
+    var sim_days = -1
     if user_args.size() >= 3:
         region = user_args[1]
         city_name = user_args[2]
         for i in range(3, user_args.size()):
             if user_args[i] == "pipes":
                 show_pipes = true
+                continue
+            if user_args[i].begins_with("sim="):
+                sim_days = int(user_args[i].substr(4))
                 continue
             var shot = _parse_shot(user_args[i])
             if shot == null:
@@ -81,12 +85,22 @@ func _ready():
     Boot.current_city_path = city_path
     Boot.current_region_name = region
 
+    # Screenshots are deterministic: the city sim never free-runs here. With
+    # sim=N it is stepped synchronously for N game days before capturing.
+    OS.set_environment("OPENSC4_SIM", "0")
     var city = load("res://CityView/CityScene/City.tscn").instantiate()
     add_child(city)
     if not city.has_method("set_building_view"):
         push_error("City script not attached (compile error?) -- aborting")
         get_tree().quit(1)
         return
+    if sim_days >= 0:
+        var sim = CitySim.new()
+        city.add_child(sim)
+        if sim.start(city, Boot.current_city, city.width - 1, city.height - 1, city.get_node("Node3D/Terrain").heightmap, false):
+            for d in range(sim_days):
+                sim.apply_day(sim.step_day())
+            print("SIM warmed up %d days: funds=%d pollution=%d busy_links=%d" % [sim.day, sim.funds, sim.pollution_total, sim.busy_segments])
     print("City ready, capturing")
     if show_pipes:
         city.set_pipes_visible(true)

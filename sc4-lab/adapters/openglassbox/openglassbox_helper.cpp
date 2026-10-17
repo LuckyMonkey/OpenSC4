@@ -4,6 +4,7 @@
 // protocol lives in openglassbox_sidecar.py; this helper deliberately uses a
 // tiny line protocol so the bridge has no third-party JSON dependency.
 
+#include "OpenGlassBox/DijkstraRouter.hpp"
 #include "OpenGlassBox/Path.hpp"
 #include "OpenGlassBox/Simulation.hpp"
 
@@ -11,6 +12,11 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
+#include <map>
+#include <utility>
+#include <cstdio>
+#include <unistd.h>
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -204,6 +210,175 @@ public:
         return result.str();
     }
 
+    // --- SC4 city mode ----------------------------------------------------
+    // A whole city on OpenGlassBox's own machinery: a generated .ogs ruleset
+    // (resources, layers with diffusion/decay, agents, building rules), road
+    // paths, buildings anchored to road nodes, and normal ticking. One grid
+    // cell is one SC4 tile. These are OpenGlassBox behaviors, not SC4 rules.
+
+    bool cityNew(std::istringstream& input, std::string& error)
+    {
+        std::uint32_t sizeU = 0u, sizeV = 0u, ticksPerMinute = 0u, seed = 0u;
+        float cellSize = 0.0f;
+        std::string script;
+        if (!(input >> sizeU >> sizeV >> cellSize >> ticksPerMinute >> seed) || sizeU == 0u || sizeV == 0u
+            || sizeU > 1024u || sizeV > 1024u || !(cellSize > 0.0f) || ticksPerMinute == 0u)
+        {
+            error = "invalid_city";
+            return false;
+        }
+        std::getline(input >> std::ws, script);
+        ogb::Config config;
+        config.grid.cellSize = cellSize;
+        config.grid.defaultCitySizeU = sizeU;
+        config.grid.defaultCitySizeV = sizeV;
+        config.time.ticksPerMinute = ticksPerMinute;
+        config.randomSeed = seed;
+        // One tick is one game minute here; reroute less often than the
+        // per-second defaults so thousands of commuters stay affordable.
+        config.routing.pathCheckTicks = 60u;
+        config.routing.pathRecalcTicks = 240u;
+        m_simulation = std::make_unique<ogb::Simulation>(config);
+        m_simulation->setPaused(false);
+        m_cellSize = cellSize;
+        m_paths.clear();
+        m_nodes.clear();
+        if (!m_simulation->loadScriptFile(script))
+        {
+            error = "script " + m_simulation->formatScriptErrors();
+            for (char& c : error)
+                if (c == '\n')
+                    c = ' ';
+            return false;
+        }
+        m_city = &m_simulation->addCity("SC4", ogb::Vector3f(0.0f, 0.0f, 0.0f), sizeU, sizeV);
+        // As the OpenGlassBox demo does: instantiate the script's layers and
+        // give the city its default router (seeded from Config::randomSeed).
+        for (auto const& item : m_simulation->getRuleset().getLayerTypes())
+            m_city->addLayer(*item.second);
+        ogb::installDijkstraRouters(*m_simulation);
+        return true;
+    }
+
+    ogb::Node& nodeAt(ogb::Path& path, float x, float y)
+    {
+        auto key = std::make_pair(&path, std::make_pair(x, y));
+        auto found = m_nodes.find(key);
+        if (found != m_nodes.end())
+            return *found->second;
+        ogb::Node& node = path.addNode(ogb::Vector3f(x, y, 0.0f));
+        m_nodes[key] = &node;
+        return node;
+    }
+
+    bool road(std::istringstream& input)
+    {
+        std::string pathName, segmentName;
+        float x1, y1, x2, y2;
+        if (m_city == nullptr || !(input >> pathName >> segmentName >> x1 >> y1 >> x2 >> y2))
+            return false;
+        try
+        {
+            ogb::Path*& path = m_paths[pathName];
+            if (path == nullptr)
+                path = &m_city->addPath(m_simulation->getRuleset().getPathType(pathName));
+            auto const& segmentType = m_simulation->getRuleset().getSegmentType(segmentName);
+            path->addSegment(segmentType, nodeAt(*path, x1, y1), nodeAt(*path, x2, y2));
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
+    std::string building(std::istringstream& input)
+    {
+        std::string typeName;
+        float x, y, reach;
+        if (m_city == nullptr || !(input >> typeName >> x >> y >> reach))
+            return "ERR invalid_building";
+        try
+        {
+            auto const& type = m_simulation->getRuleset().getBuildingType(typeName);
+            ogb::Node* best = nullptr;
+            float bestDistance = std::numeric_limits<float>::max();
+            for (auto const& item : m_nodes)
+            {
+                ogb::Vector3f const& p = item.second->getPosition();
+                float d = std::hypot(p.x - x, p.y - y);
+                if (d < bestDistance)
+                {
+                    bestDistance = d;
+                    best = item.second;
+                }
+            }
+            if (best != nullptr && bestDistance <= reach)
+            {
+                m_city->addBuilding(type, *best);
+                return "OK anchored=1";
+            }
+            m_city->addBuilding(type, ogb::Vector3f(x, y, 0.0f));
+            return "OK anchored=0";
+        }
+        catch (...)
+        {
+            return "ERR unknown_building_type";
+        }
+    }
+
+    std::string layer(std::string const& name) const
+    {
+        ogb::Layer* found = (m_simulation == nullptr) ? nullptr : m_simulation->findLayer(name);
+        if (found == nullptr || m_city == nullptr)
+            return "ERR unknown_layer";
+        ogb::CellRegion const& region = m_city->getRegion();
+        std::ostringstream out;
+        out << "OK u0=" << region.u0 << " v0=" << region.v0 << " w=" << region.getMaxU() - region.u0
+            << " h=" << region.getMaxV() - region.v0 << " data=";
+        std::uint64_t total = 0u;
+        for (int32_t v = region.v0; v < region.getMaxV(); ++v)
+            for (int32_t u = region.u0; u < region.getMaxU(); ++u)
+            {
+                std::uint32_t amount = found->getResource(ogb::Cell{ u, v });
+                total += amount;
+                out << amount << ((u + 1 < region.getMaxU() || v + 1 < region.getMaxV()) ? "," : "");
+            }
+        out << " total=" << total;
+        return out.str();
+    }
+
+    std::string traffic() const
+    {
+        std::ostringstream out;
+        out.precision(4);
+        std::size_t count = 0u;
+        std::ostringstream data;
+        data.precision(4);
+        for (auto const& item : m_paths)
+            for (auto const& segment : item.second->getSegments())
+            {
+                ogb::Vector3f const& a = segment->getFrom().getPosition();
+                ogb::Vector3f const& b = segment->getTo().getPosition();
+                data << (count ? ";" : "") << a.x << ":" << a.y << ":" << b.x << ":" << b.y << ":"
+                     << segment->getFlow() << ":" << segment->getSaturation();
+                ++count;
+            }
+        out << "OK n=" << count << " data=" << data.str();
+        return out.str();
+    }
+
+    std::string cityStats() const
+    {
+        if (m_city == nullptr)
+            return "ERR no_city";
+        auto const& clock = m_simulation->getClock();
+        std::ostringstream out;
+        out << "OK tick=" << clock.getTicks() << " day=" << clock.getDay() << " hour=" << clock.getHourOfDay()
+            << " agents=" << m_city->getAgents().size() << " buildings=" << m_city->getBuildings().size();
+        return out.str();
+    }
+
     std::string version() const
     {
         return std::string("OK commit=") + OPENSC4_OGB_COMMIT;
@@ -282,6 +457,59 @@ public:
             output = budgetMonth(days);
             return true;
         }
+        if (command == "CITY_NEW")
+        {
+            std::string error;
+            output = cityNew(input, error) ? cityStats() : "ERR " + error;
+            return true;
+        }
+        if (command == "ROAD")
+        {
+            output = road(input) ? "OK" : "ERR invalid_road";
+            return true;
+        }
+        if (command == "BUILDING")
+        {
+            output = building(input);
+            return true;
+        }
+        if (command == "STEP")
+        {
+            std::uint64_t ticks = 0u;
+            if (m_city == nullptr || !(input >> ticks) || ticks > 50000000u)
+            {
+                output = "ERR invalid_step";
+                return true;
+            }
+            try
+            {
+                for (std::uint64_t i = 0u; i < ticks; ++i)
+                    m_simulation->stepOneTick();
+                output = cityStats();
+            }
+            catch (std::exception const& e)
+            {
+                output = std::string("ERR step_failed ") + e.what();
+            }
+            return true;
+        }
+        if (command == "LAYER")
+        {
+            std::string name;
+            input >> name;
+            output = layer(name);
+            return true;
+        }
+        if (command == "TRAFFIC")
+        {
+            output = traffic();
+            return true;
+        }
+        if (command == "CITY_STATS")
+        {
+            output = cityStats();
+            return true;
+        }
         if (command == "QUIT")
         {
             output = "OK";
@@ -298,19 +526,30 @@ private:
     ogb::SegmentType m_segmentType;
     std::unique_ptr<ogb::Simulation> m_simulation;
     ogb::City* m_city = nullptr;
+    float m_cellSize = 1.0f;
+    std::map<std::string, ogb::Path*> m_paths;
+    std::map<std::pair<ogb::Path*, std::pair<float, float>>, ogb::Node*> m_nodes;
 };
 
 } // namespace
 
 int main()
 {
+    // The protocol owns the original stdout. OpenGlassBox writes diagnostics
+    // (e.g. "Parsing script ...") to std::cout, which now goes to stderr so it
+    // can never desynchronise request/response lines.
+    int protocolFd = dup(STDOUT_FILENO);
+    dup2(STDERR_FILENO, STDOUT_FILENO);
+    FILE* protocol = fdopen(protocolFd, "w");
     Helper helper;
     std::string line;
     while (std::getline(std::cin, line))
     {
         std::string output;
         bool keepRunning = helper.handle(line, output);
-        std::cout << output << '\n' << std::flush;
+        std::fputs(output.c_str(), protocol);
+        std::fputc('\n', protocol);
+        std::fflush(protocol);
         if (!keepRunning)
             break;
     }

@@ -33,6 +33,20 @@ func _ready():
     create_terrain()
     set_cursor()
     _setup_city_editor()
+    _start_city_sim()
+
+# Runs the city on the OpenGlassBox candidate backend (simulation/city_sim.gd).
+# Set OPENSC4_SIM=0 to load the city without simulating it.
+var city_sim : CitySim
+
+func _start_city_sim():
+    if OS.get_environment("OPENSC4_SIM") == "0":
+        return
+    city_sim = CitySim.new()
+    city_sim.name = "CitySim"
+    add_child(city_sim)
+    if not city_sim.start(self, savefile, width - 1, height - 1, $Node3D/Terrain.heightmap):
+        Log.warn("City simulation unavailable; showing the city without it")
 
 func _setup_city_editor():
     transit_editor = $Node3D/TransitTiles

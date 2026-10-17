@@ -11,6 +11,9 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
+
+import sc4_city_ruleset
 from typing import Any
 
 PROTOCOL = "opensc4.adapter.v1"
@@ -25,11 +28,16 @@ class BridgeError(Exception):
 
 class Backend:
     def __init__(self, helper: str) -> None:
+        # Engine diagnostics go to a log file, never to an inherited stderr the
+        # host may have closed (a closed pipe would SIGPIPE the helper).
+        log_path = os.environ.get("OPENSC4_OPENGLASSBOX_LOG",
+                                  os.path.join(tempfile.gettempdir(), "opensc4-openglassbox-helper.log"))
+        self.log = open(log_path, "a")
         self.process = subprocess.Popen(
             [helper],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=None,
+            stderr=self.log,
             text=True,
             bufsize=1,
         )
@@ -151,6 +159,71 @@ class Backend:
         self.emit("budget_month", values)
         return values
 
+    # --- SC4 city mode -------------------------------------------------------
+    TICKS_PER_MINUTE = 1
+
+    def city_init(self, payload: dict[str, Any]) -> dict[str, Any]:
+        city = payload["city"]
+        script, commands, meta = sc4_city_ruleset.build(city)
+        handle = tempfile.NamedTemporaryFile("w", suffix=".ogs", prefix="opensc4-city-", delete=False)
+        handle.write(script)
+        handle.close()
+        dims = city["dimensions"]
+        self._command(f"CITY_NEW {dims['width']} {dims['height']} 1.0 {self.TICKS_PER_MINUTE} "
+                      f"{int(payload.get('seed', 1))} {handle.name}")
+        anchored = 0
+        for line in commands:
+            values = self._command(line)
+            anchored += int(values.get("anchored", 0))
+        self.city = city
+        self.month_days = 0
+        self.funds = int(payload.get("funds", 50000))
+        self.rates = [float(r) for r in payload.get("rates", [9.0] * 12)]
+        self.mult = float(payload.get("mult", 1.0))
+        meta.update({"script": handle.name, "anchored_buildings": anchored, "funds": self.funds})
+        meta.update(self._command("CITY_STATS"))
+        self.emit("city_init", {"buildings": meta["buildings"]})
+        return meta
+
+    def city_advance(self, days: int) -> dict[str, Any]:
+        ticks = int(days) * 24 * 60 * self.TICKS_PER_MINUTE
+        stats = self._command(f"STEP {ticks}")
+        months = []
+        self.month_days += int(days)
+        while self.month_days >= 30:
+            self.month_days -= 30
+            budget = sc4_city_ruleset.monthly_budget(self.city, self.rates, self.mult)
+            self.funds += budget["tax_income"] - budget["expenses"]
+            budget["funds"] = self.funds
+            months.append(budget)
+            self.emit("month", {"funds": self.funds})
+        return {"stats": stats, "months": months, "funds": self.funds}
+
+    def city_layer(self, name: str) -> dict[str, Any]:
+        line = self._raw(f"LAYER {name}")
+        fields = dict(item.split("=", 1) for item in line.split()[1:])
+        return {"w": int(fields["w"]), "h": int(fields["h"]), "total": int(fields["total"]),
+                "data": [int(v) for v in fields["data"].split(",")] if fields["data"] else []}
+
+    def city_traffic(self) -> dict[str, Any]:
+        line = self._raw("TRAFFIC")
+        data = line.split("data=", 1)[1] if "data=" in line else ""
+        segments = []
+        for item in data.split(";") if data else []:
+            x1, y1, x2, y2, flow, sat = item.split(":")
+            segments.append([float(x1), float(y1), float(x2), float(y2), float(flow), float(sat)])
+        return {"segments": segments}
+
+    def _raw(self, command: str) -> str:
+        if self.process.stdin is None or self.process.stdout is None:
+            raise BridgeError("helper pipes unavailable")
+        self.process.stdin.write(command + "\n")
+        self.process.stdin.flush()
+        line = self.process.stdout.readline().strip()
+        if not line or line.startswith("ERR"):
+            raise BridgeError("helper rejected command: " + line)
+        return line
+
     def save(self) -> dict[str, Any]:
         snapshot = self.snapshot()
         return {
@@ -209,7 +282,8 @@ def main() -> int:
                             "supports_save_load": True,
                             "fixed_tick_seconds": 0.05,
                             "external_commit": backend.commit,
-                            "commands": ["add_road", "budget_set", "budget_month"],
+                            "commands": ["add_road", "budget_set", "budget_month",
+                                         "city_init", "city_advance", "city_layer", "city_traffic"],
                             "rulesets": ["sc4-tax-v0.3"],
                         },
                         "save_schema": SAVE_SCHEMA,
@@ -229,6 +303,14 @@ def main() -> int:
                     elif kind == "budget_set":
                         event = backend.budget_set(payload)
                         result = {"accepted": True, "events": [event]}
+                    elif kind == "city_init":
+                        result = {"accepted": True, "city": backend.city_init(payload)}
+                    elif kind == "city_advance":
+                        result = {"accepted": True, **backend.city_advance(int(payload.get("days", 1)))}
+                    elif kind == "city_layer":
+                        result = {"accepted": True, "layer": backend.city_layer(str(payload.get("name", "AirPollution")))}
+                    elif kind == "city_traffic":
+                        result = {"accepted": True, "traffic": backend.city_traffic()}
                     elif kind == "budget_month":
                         result = {"accepted": True, "budget": backend.budget_month(int(payload.get("days", 30)))}
                     else:

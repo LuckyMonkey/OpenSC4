@@ -18,7 +18,8 @@ func load(file, dbdf=null):
     assert(len(raw_data) > 0) #,"DBPFSubfile.load: no data")
     # 4 bytes (char) - signature
     var signature = raw_data.slice(ind, ind+4).get_string_from_ascii()
-    assert(signature == "EQZB") #,"DBPFSubfile.load: not an Exemplar file")
+    # Exemplars are EQZB; their parent cohorts use the same layout as CQZB.
+    assert(signature == "EQZB" or signature == "CQZB") #,"DBPFSubfile.load: not an Exemplar file")
     ind += 4
     # 4 bytes - parent cohort indicator always 0x23232331
     ind += 4
