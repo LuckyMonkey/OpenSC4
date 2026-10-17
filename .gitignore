@@ -51,3 +51,9 @@ Apps/dgVoodoo.conf
 tropod_Properties.xml
 tools/__pycache__/*
 sc4-lab/**/__pycache__/*
+
+# Reference observations stay local (tools/check_data_boundary.sh).
+sc4-lab/reference/observations/*
+!sc4-lab/reference/observations/.gitkeep
+sc4-lab/reference/manifests/*
+!sc4-lab/reference/manifests/.gitkeep

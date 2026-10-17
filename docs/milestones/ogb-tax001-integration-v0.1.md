@@ -6,7 +6,7 @@ Date 2026-10-17. SC4 executable SHA-256 `f512a405…1153`. OpenGlassBox
 ## Pipeline
 
 ```text
-SC4 (live memory) ─► reference observations (sc4-lab/reference/observations/TAX_001/)
+SC4 (live memory) ─► reference observations (local only: sc4-lab/reference/observations/TAX_001/)
                          │ split: derivation | held_out
             ┌────────────┴─────────────┐
             ▼                          ▼
@@ -29,6 +29,16 @@ policy were committed (`61ef38b`) before any candidate was scored.
 bash tools/build_openglassbox_adapter.sh --root /path/to/OpenGlassBox   # fd7d918
 python3 tools/sc4_tax_pipeline.py verify sc4-lab/reference/observations/TAX_001/*.jsonl
 # exit 0 = OpenGlassBox exact on every held-out month
+```
+
+Reference observations are **local only** (`tools/check_data_boundary.sh`
+rejects them in Git). Regenerate them from your own captures first:
+
+```bash
+python3 tools/sc4_tax_pipeline.py extract ~/.cache/opensc4/dynamic --series ~/.cache/opensc4/dynamic/rate0-poke-series.jsonl \
+    --split derivation --out sc4-lab/reference/observations/TAX_001/derivation-rate0-poke.jsonl
+python3 tools/sc4_tax_pipeline.py extract ~/.cache/opensc4/dynamic/ride-tax20 \
+    --split held_out --out sc4-lab/reference/observations/TAX_001/heldout-ride-tax20.jsonl
 ```
 
 To add data from a new live run:
