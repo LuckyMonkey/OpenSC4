@@ -41,7 +41,7 @@ Godot clone of SimCity4
     - [ ] Render the flora, fauna and buildings
     - [ ] Implement God tools
     - [ ] Implement mayor tools
-    - [ ] City simulation
+    - [~] City simulation (candidate, see docs/runbooks/city-simulation.md)
     - [ ] Play music
 - [ ] Multiplayer integration
 - [ ] Modding
@@ -49,6 +49,7 @@ Godot clone of SimCity4
 ## Developer documentation
 
 - **[Distillation handoff, runbook, roadmap](docs/DISTILLATION-HANDOFF.md)** — start here for SC4 simulation research
+- [City simulation (OpenGlassBox backend)](docs/runbooks/city-simulation.md)
 - [Project status](docs/project-status.md)
 - [Roadmap and milestones](docs/roadmap.md)
 - [Architecture and simulation seams](docs/architecture.md)
