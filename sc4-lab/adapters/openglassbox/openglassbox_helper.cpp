@@ -238,6 +238,9 @@ public:
         // per-second defaults so thousands of commuters stay affordable.
         config.routing.pathCheckTicks = 60u;
         config.routing.pathRecalcTicks = 240u;
+        // A commuter with no reachable free destination gives up after two
+        // game hours instead of forty; it would never arrive anyway.
+        config.routing.agentGiveUpTicks = 120u;
         m_simulation = std::make_unique<ogb::Simulation>(config);
         m_simulation->setPaused(false);
         m_cellSize = cellSize;

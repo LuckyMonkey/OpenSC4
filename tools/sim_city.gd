@@ -34,8 +34,10 @@ func _ready():
         return
     for d in range(days):
         var t = Time.get_ticks_msec()
-        sim.apply_day(sim.step_day())
-        print("SIM day %d  %d ms  agents=%s  pollution=%d  busy_links=%d  funds=%d" % [sim.day, Time.get_ticks_msec() - t,
+        var stepped = sim.step_day()
+        var t_step = Time.get_ticks_msec() - t
+        sim.apply_day(stepped)
+        print("SIM day %d  %d ms (step+IPC %d ms, apply/draw %d ms)  agents=%s  pollution=%d  busy_links=%d  funds=%d" % [sim.day, Time.get_ticks_msec() - t, t_step, Time.get_ticks_msec() - t - t_step,
             str(sim.last_stats.get("agents", "?")), sim.pollution_total, sim.busy_segments, sim.funds])
         if not sim.last_budget.is_empty() and sim.day % 30 == 0:
             print("SIM month: %s" % JSON.stringify(sim.last_budget))

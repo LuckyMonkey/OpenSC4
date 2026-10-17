@@ -52,6 +52,12 @@ def build(city: dict[str, Any]) -> tuple[str, list[str], dict[str, Any]]:
     cell = 1.0  # helper coordinates are tiles; cellSize is 1 tile
     summary = {"residential": 0, "commercial": 0, "industrial": 0, "other": 0}
 
+    # Only as many residents commute as there are jobs (candidate rule): with
+    # more workers than job slots the surplus would search the whole graph and
+    # never arrive, which dominated the step cost.
+    residents = sum(_capacity(e) for e in city["entities"] if e["attributes"].get("class") == "residential")
+    jobs = sum(_capacity(e) for e in city["entities"] if e["attributes"].get("class") in ("commercial", "industrial"))
+    commuting_share = min(1.0, jobs / residents) if residents else 0.0
     carry = {"home": 0.0, "job": 0.0}
     for entity in city["entities"]:
         attrs = entity["attributes"]
@@ -61,7 +67,8 @@ def build(city: dict[str, Any]) -> tuple[str, list[str], dict[str, Any]]:
         # Whole People units per building; fractions carry over in file order so
         # the city total matches capacity / PEOPLE_PER_UNIT (deterministic).
         pool = "home" if klass == "residential" else "job"
-        carry[pool] += _capacity(entity) / PEOPLE_PER_UNIT
+        share = commuting_share if pool == "home" else 1.0
+        carry[pool] += _capacity(entity) * share / PEOPLE_PER_UNIT
         units = int(carry[pool])
         carry[pool] -= units
         rules = []
@@ -121,9 +128,10 @@ def build(city: dict[str, Any]) -> tuple[str, list[str], dict[str, Any]]:
         "buildings": len(placements),
         "road_edges": len(roads["edges"]),
         "classes": summary,
+        "commuting_share": round(commuting_share, 4),
         "candidate_parameters": {
             "people_per_unit": PEOPLE_PER_UNIT, "air_diffusion_pct": AIR_DIFFUSION, "air_decay_pct": AIR_DECAY,
-            "commuter_speed": COMMUTER_SPEED, "placeholder_base_per_capacity": PLACEHOLDER_BASE_PER_CAPACITY,
+            "commuter_speed": COMMUTER_SPEED, "commuters_capped_to_jobs": True, "agent_give_up_game_hours": 2, "placeholder_base_per_capacity": PLACEHOLDER_BASE_PER_CAPACITY,
         },
     }
     return "\n".join(lines), commands, meta

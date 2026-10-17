@@ -51,11 +51,42 @@ godot --headless --path . res://tools/ExportCity.tscn -- /tmp/city.json   # cano
 ## Measured (Big City Tutorial, 3,427 buildings, 3,436 road links)
 
 - Model build + OpenGlassBox city init: about 5 s.
-- One game day: 4–6 s (commute hours dominate; overnight ≈ 0.05 s per hour).
+- One game day: 1.6–2.0 s in Godot (was 4.8–5.7 s before the culls below).
 - Morning and evening commuter waves of ~110 agents (1 agent = 100 people);
   ~2,500–2,800 road links carry traffic.
 - Air pollution approaches a steady state within ~10 days
   (30,876 → 48,801 total).
+
+## Performance: what was culled and what was not
+
+Profiled per game day (helper only, tutorial city):
+
+| Component | Before | Share |
+| --- | --- | --- |
+| Commuter agents | ~4–6.5 s | ~85 % |
+| Pollution emitter rules | ~0.9 s | ~15 % |
+| Other OpenGlassBox work | 0.13 s | ~2 % |
+| Layer/traffic dumps + JSON | ~20 ms | <1 % |
+| Godot overlay redraw | 40–50 ms | <1 % |
+
+Adopted (behavior kept; tests below):
+
+- **Lost commuters give up after 2 game hours** (`agentGiveUpTicks` 2400 →
+  120): 3.73 → 2.41 s/day; commute waves unchanged.
+- **Commuters capped to job slots** (`commuting_share`): 2.41 → 1.32 s/day.
+  256 home units competed for 145 job units, and the surplus searched the whole
+  graph. Modelling choice: unemployed residents do not commute.
+
+Rejected because they change results:
+
+- Batched pollution emission (every 2 h ×2 / every 6 h ×6): 25–55 % faster,
+  but steady-state pollution rises 16 % / 57 %. OpenGlassBox decay removes at
+  least one unit per cell, so burst input settles higher.
+- Faster commuters: no gain.
+
+Next candidates, not yet done: collapse chains of degree-2 road tiles into
+single segments (fewer router nodes, same topology); only rebuild overlays
+when values change.
 
 ## Known limits
 
