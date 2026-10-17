@@ -29,7 +29,7 @@ claim.
 | Static candidate ledger | Implemented, unverified | 185 named-string candidates + code references |
 | Private SC4 evidence pack | Implemented, static-only | Target manifest + 57 categorized leads; runtime input pending |
 | Live SC4 hashed capture | First runtime milestone | 859 launch regions, 913 city regions, 143 transition changes |
-| SC4 tax path | First native distillation milestone | Proven rate storage/getter/setter and tax-income writer boundary; full taxable-base formula pending |
+| SC4 tax path | Native distillation v0.2 | Proven rate storage/getter/setter, twelve-category accumulator loop, conversion helper boundary, and tax-income writer; table meanings and taxable-base inputs pending |
 | SC4 budget telemetry | Implemented, live capture | Authoritative funds/tax-rate/category-total probe; 45-sample while-playing transition captured |
 | SC4 system identification | Tooling milestone | Read-only series capture, paired finite differences, replicate aggregation, guarded tax intervention, response summaries, and controlled-run plans; first paired tax run pending |
 | Godot road editor/save path | Parser gate passed, retail SC4 gate pending | In-city road tool, safe baseline+journal export, structured network-index decode, and fail-closed experimental Road DBPF writer |
