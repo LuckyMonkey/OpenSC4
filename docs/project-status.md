@@ -31,6 +31,7 @@ claim.
 | Live SC4 hashed capture | First runtime milestone | 859 launch regions, 913 city regions, 143 transition changes |
 | SC4 tax path | Native distillation v0.2 | Proven rate storage/getter/setter, twelve-category accumulator loop, conversion helper boundary, and tax-income writer; table meanings and taxable-base inputs pending |
 | SC4 budget telemetry | Implemented, live capture | Authoritative funds/tax-rate/category-total probe; 45-sample while-playing transition captured |
+| SC4 simulation date | Native runtime candidate v0.1 | Clock service/object path and integer calendar helper recovered; live serial/date capture works, restart/save/tick promotion pending |
 | SC4 system identification | Tooling milestone | Read-only series capture, paired finite differences, replicate aggregation, guarded tax intervention, response summaries, and controlled-run plans; first paired tax run pending |
 | Godot road editor/save path | Parser gate passed, retail SC4 gate pending | In-city road tool, safe baseline+journal export, structured network-index decode, and fail-closed experimental Road DBPF writer |
 
@@ -92,11 +93,15 @@ claim.
 - The authoritative budget getter and native funds adder are now resolved. A
   read-only probe follows the budget global and captures funds, tax income,
   twelve tax rates, and per-category totals without screenshot inference.
+- The native clock service/date-object path is now resolved for the target
+  executable. A read-only probe reconstructs its integer calendar conversion
+  and captured a live serial/date candidate; simulation tick and budget-boundary
+  correlation remain open.
 - `tools/sc4_system_id.py` can now capture those verified fields as structured
   response series, compare a baseline against an intervention, aggregate
   repeated runs, and retain optional starting-save hashes. It does not apply
-  interventions and it does not claim a month-level response until a
-  simulation clock field is verified.
+  interventions and it does not claim a month-level response until the native
+  date candidate is promoted and a simulation tick/update boundary is verified.
 - `tools/sc4_tax_intervention.py` provides a dry-run-first native setter
   operator. It was not applied to the active city in this milestone; category
   mapping and the taxable-base function remain open.

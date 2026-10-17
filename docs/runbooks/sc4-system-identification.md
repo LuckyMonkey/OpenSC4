@@ -7,19 +7,22 @@ functions, alter saves, or upload data.
 
 ## Current milestone
 
-`tools/sc4_system_id.py` provides three operations:
+`tools/sc4_system_id.py` provides four operations:
 
 - `plan`: create a factor plan without fabricating observations;
 - `capture`: record a live budget series using the verified budget probe;
+  pass `--with-clock` to require and include the native date candidate;
 - `analyze`: pair two series by sample index and calculate finite-difference
   sensitivities, discrete response derivatives, and response area;
 - `aggregate`: combine repeated paired analyses by intervention value and
   report replicate variance and sign consistency.
 
 The current telemetry exposes funds, tax income, tax rates, and tax category
-totals. It does not yet expose a verified simulation month or tick. Until that
-field is recovered, wall-clock time is diagnostic only and no result may be
-described as a month-by-month SC4 response.
+totals. `tools/sc4_clock_probe.py` now exposes a native simulation-date
+candidate and its recovered integer calendar conversion. The date candidate is
+not yet promoted to shared budget timing: no simulation tick/update counter or
+budget-boundary equivalence has been verified. Wall-clock time remains
+diagnostic only.
 
 ## 1. Make a plan
 
@@ -41,7 +44,28 @@ python3 tools/sc4_system_id.py plan \
 The plan is metadata only. Every run must begin from the same disposable save
 snapshot. Restoring a tax rate after a run does not restore the city state.
 
-## 2. Capture a read-only series
+## 2. Capture the native date candidate
+
+Use the clock probe alongside the budget probe. It reads the clock service and
+embedded date object through a version-specific, read-only native path:
+
+```bash
+pid=$(pgrep -n -f 'S:\\steamapps\\common\\SimCity 4 Deluxe\\Apps\\SimCity 4.exe')
+python3 tools/sc4_clock_probe.py \
+  --pid "$pid" \
+  --duration 180 \
+  --interval 2 \
+  --out /tmp/sc4-clock-series.jsonl
+```
+
+The result records `simulation_date_serial`, `simulation_year`,
+`simulation_month`, and `simulation_day`, plus native resolution evidence.
+It does not write memory, call a game function, or read screenshots. Treat the
+date as `runtime-candidate` until it survives save/reload, process restart,
+and one observed transition. See
+`docs/milestones/sc4-clock-distillation-v0.1.md` for the exact native path.
+
+## 3. Capture a read-only series
 
 Find the live process without changing it:
 
@@ -90,7 +114,21 @@ identity, executable image base, budget-probe evidence, intervention metadata,
 sample index, structured metrics, and (when `--save` is supplied) only the
 starting save's hash/chunk metadata. Keep live reference output outside Git.
 
-## 3. Analyze a paired response
+For a timing-aware capture, add `--with-clock`. This merges the native date
+candidate into each structured sample and fails closed if the clock path cannot
+be resolved:
+
+```bash
+python3 tools/sc4_system_id.py capture \
+  --pid <PID> \
+  --experiment-id CLOCK_BUDGET_ALIGNMENT_001 \
+  --phase baseline \
+  --with-clock \
+  --duration 60 --interval 2 \
+  --out /tmp/sc4-clock-budget-series.jsonl
+```
+
+## 4. Analyze a paired response
 
 ```bash
 python3 tools/sc4_system_id.py analyze \
@@ -114,7 +152,7 @@ These are measurements, not recovered SC4 source formulas. A derivative is a
 description of the sampled response, not proof that SC4 uses calculus or a
 continuous function internally.
 
-## 4. Aggregate repeated runs
+## 5. Aggregate repeated runs
 
 Repeat the same paired experiment from independent copies of the same starting
 save, then aggregate the private analysis outputs:
@@ -134,15 +172,15 @@ paired delta, response-by-sample summaries, replicate count, and whether the
 direction was consistent. Mixed signs or high variance are evidence to design
 another experiment, not permission to fit a stronger formula.
 
-## 5. Promotion rules
+## 6. Promotion rules
 
 Do not promote a fitted curve or correlation to a behavioral rule until:
 
 1. the reference and experiment start from the same save hash;
 2. the input was applied through a verified setter or a separately validated
    memory intervention;
-3. the simulation-time axis is recovered, or the result is explicitly kept as
-   a wall-clock diagnostic;
+3. the native date candidate is present for alignment, or the result is
+   explicitly kept as a wall-clock diagnostic;
 4. the response repeats across independent runs;
 5. a held-out input value distinguishes the proposed model from alternatives;
 6. the normalized observation and executable identity are preserved privately;
@@ -151,8 +189,9 @@ Do not promote a fitted curve or correlation to a behavioral rule until:
 
 ## Current edge problems
 
-- The budget probe has no verified simulation date/tick, so sample alignment
-  can be affected by speed, pause state, and asynchronous accounting.
+- The clock probe has a native date candidate but no verified simulation tick,
+  so sample alignment can still be affected by speed, pause state, and
+  asynchronous accounting.
 - Tax category totals are observed aggregates; the taxable-base formula is
   still unresolved.
 - A native setter is stronger evidence than a direct field write because it
@@ -165,7 +204,8 @@ Do not promote a fitted curve or correlation to a behavioral rule until:
 
 ## Next implementation milestones
 
-1. Add the verified simulation-date/tick field to the budget observation schema.
+1. Validate the native date candidate across pause/run, save/reload, and
+   process restart; keep the tick field separate until it is found.
 2. Add save identity and starting-state hashes to the capture manifest without
    copying the save into the repository.
 3. Add a native tax-setter operator behind an explicit, disposable-city command

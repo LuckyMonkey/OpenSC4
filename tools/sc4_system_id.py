@@ -7,10 +7,10 @@ paired deltas, finite-difference sensitivities, discrete derivatives, step
 response summaries, and a small sensitivity matrix. It never changes the
 reference process, reference observations, or acceptance policy.
 
-Important boundary: the current budget probe has no verified SC4 simulation
-month/tick field. Captures therefore retain sample index and wall-clock
-elapsed time, while explicitly marking the simulation-time axis unavailable.
-These are useful response measurements, but they are not month-level claims.
+Important boundary: the budget probe has no verified SC4 simulation tick.
+Captures retain sample index and wall-clock elapsed time, and can optionally
+include the native simulation-date candidate from ``sc4_clock_probe``. Those
+date samples are useful for alignment, but are not yet month-level claims.
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import sc4_budget_probe
+import sc4_clock_probe
 import reference_capture
 from memory_observatory import ObservatoryError, open_memory, process_identity
 
@@ -122,6 +123,33 @@ def capture(args: argparse.Namespace) -> int:
     try:
         while True:
             sample = sc4_budget_probe.sample(handle, args.pid, base)
+            clock_sample = None
+            clock_error = None
+            try:
+                clock_sample = sc4_clock_probe.sample(handle, args.pid, base)
+            except sc4_clock_probe.ClockProbeError as exc:
+                if args.with_clock:
+                    raise SystemIdError(f"clock probe failed: {exc}") from exc
+                clock_error = str(exc)
+            metrics = dict(sample["metrics"])
+            evidence = dict(sample["evidence"])
+            source = {
+                "tool": "tools/sc4_system_id.py",
+                "budget_probe_schema": sample["schema"],
+                "pid": args.pid,
+                "process": identity,
+                "image_base": sample["image_base"],
+                "raw_bytes_recorded": False,
+                "raw_memory_written": False,
+                "starting_save": starting_save,
+                "clock_probe": "enabled" if args.with_clock else "opportunistic",
+            }
+            if clock_sample is not None:
+                metrics.update(clock_sample["metrics"])
+                evidence.update({f"clock_{key}": value for key, value in clock_sample["evidence"].items()})
+                source["clock_resolution"] = clock_sample["native_resolution"]
+            elif clock_error is not None:
+                source["clock_error"] = clock_error
             records.append(
                 {
                     "schema": SERIES_SCHEMA,
@@ -132,23 +160,15 @@ def capture(args: argparse.Namespace) -> int:
                     "sample_index": sample_index,
                     "elapsed_seconds": round(time.monotonic() - started, 6),
                     "time_axis": {
-                        "primary": "sample_index",
-                        "simulation_time_status": "unavailable",
+                        "primary": "simulation_date_serial" if clock_sample is not None else "sample_index",
+                        "simulation_time_status": "native-date-candidate" if clock_sample is not None else "unavailable",
+                        "simulation_tick": "not recovered",
                         "wall_clock_seconds": "diagnostic_only",
                     },
                     "intervention": intervention,
-                    "source": {
-                        "tool": "tools/sc4_system_id.py",
-                        "budget_probe_schema": sample["schema"],
-                        "pid": args.pid,
-                        "process": identity,
-                        "image_base": sample["image_base"],
-                        "raw_bytes_recorded": False,
-                        "raw_memory_written": False,
-                        "starting_save": starting_save,
-                    },
-                    "metrics": sample["metrics"],
-                    "evidence": sample["evidence"],
+                    "source": source,
+                    "metrics": metrics,
+                    "evidence": evidence,
                     "provenance": {
                         "observation_kind": "live-memory-authoritative",
                         "reference_claim": True,
@@ -222,6 +242,11 @@ def analyze(args: argparse.Namespace) -> int:
     baseline = read_series(args.baseline)
     experiment = read_series(args.experiment)
     pairs = pair_by_index(baseline, experiment)
+    date_candidate_present = all(
+        "simulation_date_serial" in item.get("metrics", {})
+        for pair in pairs
+        for item in pair
+    )
     metrics = args.metric or ["funds_public", "tax_income", "tax_category_total_sum"]
     first_intervention = experiment[0].get("intervention", {})
     input_delta = args.input_delta
@@ -275,7 +300,11 @@ def analyze(args: argparse.Namespace) -> int:
             "paired_samples": len(pairs),
             "baseline_only_samples": len(baseline) - len(pairs),
             "experiment_only_samples": len(experiment) - len(pairs),
-            "simulation_time_status": "unavailable; wall-clock axis is diagnostic only",
+            "simulation_time_status": (
+                "native-date-candidate present; wall-clock axis remains diagnostic"
+                if date_candidate_present
+                else "unavailable; wall-clock axis is diagnostic only"
+            ),
         },
         "metrics": response,
         "sensitivity_matrix": sensitivity_matrix,
@@ -447,6 +476,11 @@ def parser() -> argparse.ArgumentParser:
     capture_parser.add_argument("--duration", type=float, default=0.0)
     capture_parser.add_argument("--interval", type=float, default=2.0)
     capture_parser.add_argument("--image-name", default="SimCity 4.exe")
+    capture_parser.add_argument(
+        "--with-clock",
+        action="store_true",
+        help="require and include the native simulation-date candidate",
+    )
     capture_parser.add_argument("--out", type=Path, required=True)
 
     analyze_parser = sub.add_parser("analyze", help="compare paired baseline and experiment series")
