@@ -51,7 +51,7 @@ godot --headless --path . res://tools/ExportCity.tscn -- /tmp/city.json   # cano
 ## Measured (Big City Tutorial, 3,427 buildings, 3,436 road links)
 
 - Model build + OpenGlassBox city init: about 5 s.
-- One game day: 1.6–2.0 s in Godot (was 4.8–5.7 s before the culls below).
+- One game day: ~1.5 s in Godot (was 4.8–5.7 s before the culls below).
 - Morning and evening commuter waves of ~110 agents (1 agent = 100 people);
   ~2,500–2,800 road links carry traffic.
 - Air pollution approaches a steady state within ~10 days
@@ -84,9 +84,27 @@ Rejected because they change results:
   least one unit per cell, so burst input settles higher.
 - Faster commuters: no gain.
 
-Next candidates, not yet done: collapse chains of degree-2 road tiles into
-single segments (fewer router nodes, same topology); only rebuild overlays
-when values change.
+- **Straight road runs merged** (`compact_roads`): 3,436 tile links → 1,291
+  segments; buildings attach at street addresses (`BUILDING_ON`). Topology and
+  lengths unchanged; pollution identical. Small gain (~0.1–0.3 s/day), and a
+  cheaper traffic overlay.
+
+Rejected: dropping the 2,326 houses that emit 1 unit of air pollution saves
+only 0.11 s/day but changes the pollution map by 23 % at the hotspots.
+
+### Where the remaining time goes (clean run, s/day)
+
+| full | no commuters | no emitters | neither |
+| --- | --- | --- | --- |
+| 1.24 | 1.09 | 0.31 | 0.10 |
+
+Pollution emission is ~75 %. 87 % of the emitted cell work comes from the 980
+industrial buildings, whose SC4 air-pollution radius is 13 or 16 tiles
+(365–545 cells per hourly add, plus the capacity check over the same diamond).
+These are real SC4 values, so the remaining speedup is inside OpenGlassBox's
+`Layer` radius operations (sum/add over chunked cells). The way forward that
+keeps behavior is an upstream OpenGlassBox optimization, proven by bit-identical
+pollution grids before/after.
 
 ## Known limits
 

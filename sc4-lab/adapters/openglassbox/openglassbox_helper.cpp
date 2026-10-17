@@ -330,6 +330,38 @@ public:
         }
     }
 
+    // Place a building at an address along the segment joining two existing
+    // road nodes (offset 0..1 from the first point), as OpenGlassBox allows.
+    std::string buildingOn(std::istringstream& input)
+    {
+        std::string typeName;
+        float x1, y1, x2, y2, offset;
+        if (m_city == nullptr || !(input >> typeName >> x1 >> y1 >> x2 >> y2 >> offset))
+            return "ERR invalid_building";
+        auto found = m_paths.find("Road");
+        if (found == m_paths.end())
+            return "ERR no_road";
+        ogb::Path& path = *found->second;
+        auto a = m_nodes.find(std::make_pair(&path, std::make_pair(x1, y1)));
+        auto b = m_nodes.find(std::make_pair(&path, std::make_pair(x2, y2)));
+        if (a == m_nodes.end() || b == m_nodes.end())
+            return "ERR unknown_segment";
+        ogb::Segment* segment = a->second->findSegmentTo(*b->second);
+        if (segment == nullptr)
+            return "ERR unknown_segment";
+        if (&segment->getFrom() != a->second)
+            offset = 1.0f - offset;
+        try
+        {
+            m_city->addBuilding(m_simulation->getRuleset().getBuildingType(typeName), path, *segment, offset);
+            return "OK anchored=1";
+        }
+        catch (...)
+        {
+            return "ERR unknown_building_type";
+        }
+    }
+
     std::string layer(std::string const& name) const
     {
         ogb::Layer* found = (m_simulation == nullptr) ? nullptr : m_simulation->findLayer(name);
@@ -474,6 +506,11 @@ public:
         if (command == "BUILDING")
         {
             output = building(input);
+            return true;
+        }
+        if (command == "BUILDING_ON")
+        {
+            output = buildingOn(input);
             return true;
         }
         if (command == "STEP")

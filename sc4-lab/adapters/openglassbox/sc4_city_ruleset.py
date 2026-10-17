@@ -44,6 +44,63 @@ def _capacity(entity: dict[str, Any]) -> int:
     return sum(int(v) for v in entity["attributes"].get("capacity", {}).values())
 
 
+def compact_roads(roads: dict[str, Any]) -> list[tuple[tuple[float, float], tuple[float, float], str]]:
+    """Merge straight runs of road tiles into single segments.
+
+    A tile node is kept when it is a junction or dead end (degree != 2), where
+    the road kind changes, or at a bend. Everything else is a mid-run node whose
+    removal keeps topology and path lengths identical. Returns segments as
+    ((x1, y1), (x2, y2), kind) in tile-centre coordinates.
+    """
+    pos = {n["id"]: (n["position"]["x"] + 0.5, n["position"]["y"] + 0.5) for n in roads["nodes"]}
+    adj: dict[str, list[tuple[str, str]]] = {node: [] for node in pos}
+    for edge in roads["edges"]:
+        adj[edge["from"]].append((edge["to"], edge["kind"]))
+        adj[edge["to"]].append((edge["from"], edge["kind"]))
+
+    def kept(node: str) -> bool:
+        links = adj[node]
+        if len(links) != 2 or links[0][1] != links[1][1]:
+            return True
+        (a, _), (b, _) = links
+        x, y = pos[node]
+        return (pos[a][0] - x, pos[a][1] - y) != (x - pos[b][0], y - pos[b][1])
+
+    keep = {node for node in pos if kept(node)}
+    seen: set[frozenset[str]] = set()
+    segments = []
+    for start in keep:
+        for first, kind in adj[start]:
+            if frozenset((start, first)) in seen:
+                continue
+            seen.add(frozenset((start, first)))
+            previous, current = start, first
+            while current not in keep:
+                nxt = next(n for n, _ in adj[current] if n != previous)
+                seen.add(frozenset((current, nxt)))
+                previous, current = current, nxt
+            segments.append((pos[start], pos[current], kind))
+    return segments
+
+
+def _anchor(segments_by_tile: dict[tuple[int, int], list[int]], segments: list, x: float, y: float,
+            reach: float) -> tuple[int, float] | None:
+    """Nearest segment within reach (tiles) of point (x, y) and the offset along it."""
+    best = None
+    r = int(math.ceil(reach))
+    for tx in range(int(x) - r, int(x) + r + 1):
+        for ty in range(int(y) - r, int(y) + r + 1):
+            for index in segments_by_tile.get((tx, ty), ()):
+                (x1, y1), (x2, y2), _ = segments[index]
+                dx, dy = x2 - x1, y2 - y1
+                length2 = dx * dx + dy * dy
+                t = 0.0 if length2 == 0 else max(0.0, min(1.0, ((x - x1) * dx + (y - y1) * dy) / length2))
+                d = math.hypot(x1 + t * dx - x, y1 + t * dy - y)
+                if d <= reach and (best is None or d < best[0]):
+                    best = (d, index, t)
+    return None if best is None else (best[1], best[2])
+
+
 def build(city: dict[str, Any]) -> tuple[str, list[str], dict[str, Any]]:
     """Return (ogs script text, helper commands after CITY_NEW, metadata)."""
     emit_levels: set[int] = set()
@@ -116,17 +173,31 @@ def build(city: dict[str, Any]) -> tuple[str, list[str], dict[str, Any]]:
               f"\tlayer AirPollution color 0x885522 capacity {AIR_CAPACITY} diffusion {AIR_DIFFUSION} "
               f"decay {AIR_DECAY} rate 1 hours rules [ ]", "end", ""]
 
+    segments = compact_roads(roads)
+    by_tile: dict[tuple[int, int], list[int]] = {}
     commands = []
-    for edge in roads["edges"]:
-        a, b = positions[edge["from"]], positions[edge["to"]]
-        commands.append(f"ROAD Road {_seg_name(edge['kind'])} {a[0]} {a[1]} {b[0]} {b[1]}")
+    for index, ((x1, y1), (x2, y2), kind) in enumerate(segments):
+        commands.append(f"ROAD Road {_seg_name(kind)} {x1} {y1} {x2} {y2}")
+        steps = int(max(abs(x2 - x1), abs(y2 - y1))) + 1
+        for k in range(steps + 1):
+            t = k / steps
+            by_tile.setdefault((int(x1 + t * (x2 - x1)), int(y1 + t * (y2 - y1))), []).append(index)
+    on_segment = 0
     for name, x, y in placements:
-        commands.append(f"BUILDING {name} {x} {y} 4")
+        hit = _anchor(by_tile, segments, x, y, 4.0)
+        if hit is None:
+            commands.append(f"BUILDING {name} {x} {y} 4")
+            continue
+        (x1, y1), (x2, y2), _ = segments[hit[0]]
+        commands.append(f"BUILDING_ON {name} {x1} {y1} {x2} {y2} {hit[1]:.4f}")
+        on_segment += 1
 
     meta = {
         "building_types": len(types),
         "buildings": len(placements),
         "road_edges": len(roads["edges"]),
+        "road_segments_compacted": len(segments),
+        "buildings_on_segments": on_segment,
         "classes": summary,
         "commuting_share": round(commuting_share, 4),
         "candidate_parameters": {
