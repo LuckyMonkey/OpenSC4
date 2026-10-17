@@ -103,6 +103,15 @@ bash tools/build_openglassbox_adapter.sh --root /path/to/OpenGlassBox   # pinned
 python3 tools/sc4_ogb_compare.py ~/.cache/opensc4/dynamic/<ride-dir>
 ```
 
+### 3.5 First verified rule pipeline (TAX_001)
+
+`tools/sc4_tax_pipeline.py verify` scores the OpenGlassBox tax module and an
+AI-fitted hypothesis against held-out SC4 months through the independent
+verifier. OpenGlassBox: 102/102 exact. AI fit: 95/102, a fail (constant
+underdetermined by 4 derivation months). See
+`docs/milestones/ogb-tax001-integration-v0.1.md` and the source-backed
+`docs/architecture/openglassbox-reuse-matrix.md`.
+
 ## 4. What we observed but have not explained
 
 From the 20%-tax ride (2007-06 → 2010-11 in game, ~42 months):

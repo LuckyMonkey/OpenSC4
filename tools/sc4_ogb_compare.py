@@ -55,15 +55,21 @@ class Sidecar:
 
 
 def settled_months(samples: list[dict[str, Any]], settle_days: int) -> list[dict[str, Any]]:
-    """One SC4 state per month, taken settle_days after the first day seen."""
+    """One SC4 state per month, taken settle_days after an observed rollover.
+
+    The first month in a capture is dropped: its rollover was not observed, so
+    inputs seen in it (for example a rate poked mid-month) may differ from the
+    inputs that produced its published tax.
+    """
     months: list[dict[str, Any]] = []
     current = None
     first_serial = None
-    taken = False
+    taken = True
     for row in samples:
         key = (row["simulation_year"], row["simulation_month"])
         if key != current:
-            current, first_serial, taken = key, row["simulation_date_serial"], False
+            observed_rollover = current is not None
+            current, first_serial, taken = key, row["simulation_date_serial"], not observed_rollover
             continue
         if not taken and row["simulation_date_serial"] - first_serial >= settle_days:
             months.append(row)
