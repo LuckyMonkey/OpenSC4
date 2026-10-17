@@ -18,8 +18,6 @@ var height_map : Array = []
 # translator from fsh-iid to texturearray layer
 var ind_layer
 # for cursor
-var cur_img
-var vec_hot
 var editor_panel : CityEditorPanel
 var transit_editor : MeshInstance3D
 var staged_road_edits : Array = []
@@ -1701,11 +1699,9 @@ func _height_at(x : float, z : float) -> float:
     return self.height_map[iz][ix] / TILE_SIZE
 
 func set_cursor():
-    var TGI_cur = {"T": 0xaa5c3144, "G": 0x00000032, "I":0x13b138d0}
-    self.vec_hot = Core.subfile(TGI_cur["T"], TGI_cur["G"], TGI_cur["I"], CURSubfile).entries[0].vec_hotspot
-    self.cur_img = Core.subfile(TGI_cur["T"], TGI_cur["G"], TGI_cur["I"], CURSubfile).get_as_texture()
-    Input.set_custom_mouse_cursor(cur_img, Input.CURSOR_ARROW, vec_hot)
-    
+    # SC4's city-view pointer: the white circle (see utils/sc4_cursors.gd).
+    Sc4Cursors.apply("default")
+
 func coord_to_uv(x, y, z):
     var TerrainTexTilingFactor = 0.2 # 0x6534284a,0x88cd66e9,0x00000001 describes this as 100m of terrain corresponds to this fraction of texture in farthest zoom
     var x_factored = (float(x)*16.0/100.0) * TerrainTexTilingFactor

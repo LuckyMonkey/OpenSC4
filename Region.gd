@@ -110,6 +110,7 @@ func _ready():
     focus_camera_on_region()
     $RadioPlayer.play_music()
     load_ui()
+    Sc4Cursors.apply("arrow")
 
 func focus_camera_on_region():
     # Fit the camera to the whole region once cities are placed. region_w/region_h
