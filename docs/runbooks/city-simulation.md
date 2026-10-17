@@ -32,6 +32,7 @@ Replace each with a measured SC4 rule as the roadmap closes it.
 ```bash
 bash tools/build_openglassbox_adapter.sh --root /path/to/OpenGlassBox   # fd7d918, or fd7d918 + 7d3ae8e (faster, see below)
 godot --path .                     # open a city: the sim starts with it
+godot --path . res://tools/PlayCity.tscn   # dev: straight into the tutorial city, sim running
 OPENSC4_SIM=0 godot --path .       # same, without simulating
 ```
 
