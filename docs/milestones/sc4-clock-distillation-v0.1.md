@@ -102,8 +102,11 @@ at 0.5 s, fastest speed, disposable city) followed by `boundaries`:
 - All five `gate_checks` were `true`. Live output stayed outside Git.
 
 Promotion gate items 1 and 4 are therefore satisfied for this session.
-Items 2 (save/reload), 3 (fresh process), and 5 (recorded executable hash)
-remain open.
+Same day: after save → reload the serial and funds matched the saved state
+(2453969, §22,875); a fresh SC4 process resolved the clock and budget again
+through the same globals; the executable hash is recorded in
+`sc4-tax-distillation-v0.3.md`. All five gate items are met for this binary:
+the date serial is promoted to verified simulation-date telemetry.
 
 ## What is not established
 

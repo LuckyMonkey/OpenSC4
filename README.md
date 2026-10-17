@@ -72,6 +72,7 @@ Godot clone of SimCity4
 - [Distillation D3 milestone](docs/milestones/distillation-d3.md)
 - [SC4 tax distillation v0.2](docs/milestones/sc4-tax-distillation-v0.2.md)
 - [SC4 simulation-date distillation v0.1](docs/milestones/sc4-clock-distillation-v0.1.md)
+- [SC4 tax distillation v0.3](docs/milestones/sc4-tax-distillation-v0.3.md)
 
 Quick local baseline:
 
