@@ -81,6 +81,28 @@ mult = *(budget+0x814) = [1.2, 1.1, 1.0]   (k = 2 in the test city)
 
 Details: `docs/milestones/sc4-tax-distillation-v0.3.md` (and v0.1/v0.2).
 
+### 3.4 OpenGlassBox candidate comparison
+
+The OpenGlassBox sidecar (`sc4-lab/adapters/openglassbox/`) now hosts the
+verified tax equation as ruleset `sc4-tax-v0.3`: state lives in OpenGlassBox
+city globals (rates/multiplier as exact IEEE bits, bases, funds, expenses),
+time advances on its clock, and the protocol gains `budget_set` and
+`budget_month` commands. OpenGlassBox's own rule language only adds/removes
+integer amounts, so the multiplication itself runs in the C++ helper.
+
+Replaying the 20%-tax ride (81 months, OpenGlassBox commit `fd7d918`):
+
+| Check | Result |
+| --- | --- |
+| tax income, SC4 inputs each month | 81/81 exact |
+| funds, seeded once then open loop with expenses 2,362 | final drift §16 |
+| cause of drift | SC4 expenses fell to 2,361 from 2012-11 on |
+
+```bash
+bash tools/build_openglassbox_adapter.sh --root /path/to/OpenGlassBox   # pinned fd7d918
+python3 tools/sc4_ogb_compare.py ~/.cache/opensc4/dynamic/<ride-dir>
+```
+
 ## 4. What we observed but have not explained
 
 From the 20%-tax ride (2007-06 → 2010-11 in game, ~42 months):
@@ -92,6 +114,8 @@ From the 20%-tax ride (2007-06 → 2010-11 in game, ~42 months):
    existing buildings, or these bases are a cache refreshed from something
    that is not changing. **This is the most important open question.**
 2. **Measurement artifacts to fix, not SC4 behavior:**
+   (Both are avoided by `sc4_ogb_compare.py`, which reads each month three
+   game days after the rollover.)
    - Some months show `funds_delta = 0` (so derived "expenses" equals the
      tax). The funds write lands a tick *after* the date flips; the ride tool
      must take the funds delta from a sample a few game-days after rollover.
@@ -109,6 +133,7 @@ From the 20%-tax ride (2007-06 → 2010-11 in game, ~42 months):
 | `sc4_budget_probe.py` | read funds, tax income, rates, bases |
 | `sc4_system_id.py` | `capture` series (clock+budget); `boundaries` correlates date steps with budget changes; `analyze`/`aggregate`/`plan` for paired runs; `self-test` |
 | `sc4_dynamic.py` | `dump` (SIGSTOP, raw copy of ~800 MiB writable memory, SIGCONT, ~1 s); `diff` 2 dumps (typed, `--delta`, `--range`) or 3 (sensitivity); `poke` (typed write, read-back, journal, `--restore`); `watch` (gdb hardware watchpoints — see §8) |
+| `sc4_ogb_compare.py` | replay a ride through the OpenGlassBox sidecar (`sc4-tax-v0.3` budget slice) and score tax per month + open-loop funds drift |
 | `sc4_ride.py` | long run: hold tax rates by memory write, sample every 0.5 s, check the tax equation each month, compressed dump per month |
 | `sc4_tax_intervention.py` | call the native tax setter through gdb (older path) |
 | `memory_observatory.py` | value scan / hash snapshots / watch (read-only) |
@@ -200,12 +225,16 @@ claude mcp add rea \
    should matter immediately, and at cheetah speed for longer horizons.
 5. **Name the 12 categories** by changing one rate at a time and matching
    the UI's budget panel.
-6. **Expenses.** Constant §2,362 here; decompose by service (police, fire,
+6. **Expenses.** §2,362/month, dropping to §2,361 in 2012-11 (found by
+   the OpenGlassBox funds replay); decompose by service (police, fire,
    schools, power, transport) by poking or changing funding sliders.
 7. **Verify `k` = difficulty** with a city started on Easy/Medium
    (expect mult 1.2/1.1).
-8. Wire `perf` breakpoints into `sc4_dynamic.py watch` (replace gdb).
-9. Port verified rules into `sc4-lab/specifications/` and the Godot
+8. Run the OpenGlassBox sidecar **live** inside `sc4_ride.py` (per-month
+   comparison as the game runs) and add each new verified rule to its
+   ruleset so the funds drift shrinks toward zero.
+9. Wire `perf` breakpoints into `sc4_dynamic.py watch` (replace gdb).
+10. Port verified rules into `sc4-lab/specifications/` and the Godot
    simulation backend seam (`docs/runbooks/simulation-backend.md`), with
    recorded held-out months as regression fixtures (summaries, not dumps).
 

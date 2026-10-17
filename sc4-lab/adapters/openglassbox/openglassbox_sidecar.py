@@ -134,6 +134,23 @@ class Backend:
         after = self.snapshot().get("tick", 0)
         return [self.emit("advanced", {"seconds": seconds, "from_tick": before, "to_tick": after})]
 
+    def budget_set(self, payload: dict[str, Any]) -> dict[str, Any]:
+        rates = [float(value) for value in payload["rates"]]
+        bases = [int(value) for value in payload["bases"]]
+        if len(rates) != 12 or len(bases) != 12:
+            raise BridgeError("budget_needs_12_rates_and_bases")
+        line = " ".join(
+            ["BUDGET_SET", str(int(payload["funds"])), str(int(payload.get("expenses", 0))),
+             repr(float(payload.get("mult", 1.0)))] + [repr(rate) for rate in rates] + [str(base) for base in bases]
+        )
+        self._command(line)
+        return self.emit("budget_set", {"funds": int(payload["funds"])})
+
+    def budget_month(self, days: int) -> dict[str, Any]:
+        values = self._command(f"BUDGET_MONTH {int(days)}")
+        self.emit("budget_month", values)
+        return values
+
     def save(self) -> dict[str, Any]:
         snapshot = self.snapshot()
         return {
@@ -192,6 +209,8 @@ def main() -> int:
                             "supports_save_load": True,
                             "fixed_tick_seconds": 0.05,
                             "external_commit": backend.commit,
+                            "commands": ["add_road", "budget_set", "budget_month"],
+                            "rulesets": ["sc4-tax-v0.3"],
                         },
                         "save_schema": SAVE_SCHEMA,
                     }
@@ -200,13 +219,20 @@ def main() -> int:
                     result = {"snapshot": backend.snapshot(), "event_cursor": backend.sequence, "events": events}
                 elif operation == "validate_command":
                     kind = payload.get("type") if isinstance(payload, dict) else None
-                    accepted = kind in {"add_road"}
+                    accepted = kind in {"add_road", "budget_set", "budget_month"}
                     result = {"accepted": accepted, "type": kind} if accepted else {"accepted": False, "error": "unknown_command"}
                 elif operation == "command":
-                    if not isinstance(payload, dict) or payload.get("type") != "add_road":
+                    kind = payload.get("type") if isinstance(payload, dict) else None
+                    if kind == "add_road":
+                        event = backend.add_road(payload)
+                        result = {"accepted": True, "snapshot": backend.snapshot(), "events": [event]}
+                    elif kind == "budget_set":
+                        event = backend.budget_set(payload)
+                        result = {"accepted": True, "events": [event]}
+                    elif kind == "budget_month":
+                        result = {"accepted": True, "budget": backend.budget_month(int(payload.get("days", 30)))}
+                    else:
                         raise BridgeError("unknown_command")
-                    event = backend.add_road(payload)
-                    result = {"accepted": True, "snapshot": backend.snapshot(), "events": [event]}
                 elif operation == "advance":
                     seconds = float(payload.get("seconds", 0.0))
                     if seconds < 0.0:
@@ -232,7 +258,7 @@ def main() -> int:
                 else:
                     raise BridgeError("unknown_operation")
                 print(json.dumps(response(request_id, True, result), sort_keys=True), flush=True)
-            except (BridgeError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            except (BridgeError, KeyError, ValueError, TypeError, json.JSONDecodeError) as exc:
                 print(json.dumps(response(request_id, False, error=str(exc)), sort_keys=True), flush=True)
     finally:
         backend.close()

@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -106,6 +107,103 @@ public:
         return result.str();
     }
 
+    // --- SC4 budget slice -------------------------------------------------
+    // Distilled SC4 monthly tax equation (docs/milestones/sc4-tax-distillation-v0.3.md),
+    // with all state held in OpenGlassBox city globals and time on its clock.
+    // OGB rules can only add/remove integer amounts, so the equation itself is
+    // evaluated here; floats are stored as their IEEE bits to stay exact.
+
+    static constexpr int kCategories = 12;
+
+    static std::uint32_t floatBits(float value)
+    {
+        std::uint32_t bits = 0u;
+        std::memcpy(&bits, &value, sizeof bits);
+        return bits;
+    }
+
+    static float bitsFloat(std::uint32_t bits)
+    {
+        float value = 0.0f;
+        std::memcpy(&value, &bits, sizeof value);
+        return value;
+    }
+
+    void setGlobal(std::string const& name, std::uint32_t amount)
+    {
+        ogb::Resources& globals = m_city->getGlobals();
+        std::uint32_t current = globals.getAmount(name);
+        if (current > 0u)
+            globals.removeResource(name, current);
+        if (amount > 0u)
+            globals.addResource(name, amount);
+    }
+
+    std::uint32_t global(std::string const& name) const
+    {
+        return m_city->getGlobals().getAmount(name);
+    }
+
+    bool budgetSet(std::istringstream& input)
+    {
+        long long funds = 0;
+        long long expenses = 0;
+        float mult = 0.0f;
+        if (!(input >> funds >> expenses >> mult) || funds < 0 || funds > 0xFFFFFFFFLL
+            || expenses < 0 || expenses > 0xFFFFFFFFLL || !std::isfinite(mult))
+            return false;
+        float rates[kCategories];
+        long long bases[kCategories];
+        for (float& rate : rates)
+            if (!(input >> rate) || !std::isfinite(rate))
+                return false;
+        for (long long& base : bases)
+            if (!(input >> base) || base < 0 || base > 0xFFFFFFFFLL)
+                return false;
+        setGlobal("SC4Funds", static_cast<std::uint32_t>(funds));
+        setGlobal("SC4Expenses", static_cast<std::uint32_t>(expenses));
+        setGlobal("SC4MultBits", floatBits(mult));
+        for (int index = 0; index < kCategories; ++index)
+        {
+            setGlobal("SC4RateBits" + std::to_string(index), floatBits(rates[index]));
+            setGlobal("SC4Base" + std::to_string(index), static_cast<std::uint32_t>(bases[index]));
+        }
+        return true;
+    }
+
+    std::string budgetMonth(std::uint32_t days)
+    {
+        // Same operation order as 0x006904C0 / 0x00692036: x87 extended
+        // precision approximated by double, float factors, one truncation.
+        double const mult = bitsFloat(global("SC4MultBits"));
+        double const perMonth = 1.0f / 1200.0f;
+        double total = 0.0;
+        for (int index = 0; index < kCategories; ++index)
+        {
+            double rate = bitsFloat(global("SC4RateBits" + std::to_string(index)));
+            total += static_cast<double>(global("SC4Base" + std::to_string(index))) * mult * rate * perMonth;
+        }
+        long long tax = static_cast<long long>(std::trunc(total));
+        long long funds = static_cast<long long>(global("SC4Funds")) + tax
+                          - static_cast<long long>(global("SC4Expenses"));
+        bool clamped = funds < 0 || funds > 0xFFFFFFFFLL;
+        if (funds < 0)
+            funds = 0;
+        if (funds > 0xFFFFFFFFLL)
+            funds = 0xFFFFFFFFLL;
+        setGlobal("SC4Funds", static_cast<std::uint32_t>(funds));
+        setGlobal("SC4TaxIncome", static_cast<std::uint32_t>(tax < 0 ? 0 : tax));
+        constexpr std::uint64_t ticksPerDay = 24u * 60u * 20u;
+        m_simulation->setTicks(m_simulation->getClock().getTicks() + ticksPerDay * days);
+        std::ostringstream result;
+        result.precision(17);
+        result << "OK tax=" << tax << " tax_exact=" << total << " funds=" << funds
+               << " clamped=" << (clamped ? 1 : 0)
+               << " tick=" << m_simulation->getClock().getTicks()
+               << " day=" << m_simulation->getClock().getDay();
+        return result.str();
+    }
+
     std::string version() const
     {
         return std::string("OK commit=") + OPENSC4_OGB_COMMIT;
@@ -166,6 +264,22 @@ public:
                 return true;
             }
             output = snapshot();
+            return true;
+        }
+        if (command == "BUDGET_SET")
+        {
+            output = budgetSet(input) ? "OK funds=" + std::to_string(global("SC4Funds")) : "ERR invalid_budget";
+            return true;
+        }
+        if (command == "BUDGET_MONTH")
+        {
+            std::uint32_t days = 0u;
+            if (!(input >> days) || days == 0u || days > 31u)
+            {
+                output = "ERR invalid_days";
+                return true;
+            }
+            output = budgetMonth(days);
             return true;
         }
         if (command == "QUIT")
