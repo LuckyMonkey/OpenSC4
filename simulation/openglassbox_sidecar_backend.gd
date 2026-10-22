@@ -14,6 +14,9 @@ var _stderr : FileAccess
 var _pid := -1
 var _request_id := 0
 var _hello : Dictionary = {}
+var last_error : Dictionary = {}
+var request_timeout_ms := 120000
+const MAX_REPLY_BYTES := 33554432
 
 func backend_id() -> String:
     return str(_hello.get("backend_id", "openglassbox-sidecar-v1"))
@@ -39,11 +42,8 @@ func start(sidecar_path : String, helper_path : String = "") -> bool:
         env_helper = ProjectSettings.globalize_path(env_helper)
     if not env_helper.is_empty():
         OS.set_environment("OPENSC4_OPENGLASSBOX_HELPER", env_helper)
-    # execute_with_pipe requires an executable path. Blocking pipe mode keeps
-    # get_line() reliable for this request/response protocol; the sidecar is
-    # still a separate process and does not block the Godot simulation thread
-    # between calls.
-    var process := OS.execute_with_pipe("/usr/bin/python3", arguments, true)
+    # Nonblocking reads let every request enforce a deadline, including restore.
+    var process := OS.execute_with_pipe("/usr/bin/python3", arguments, false)
     if not process.has("stdio"):
         push_error("Could not start OpenGlassBox sidecar: %s" % process)
         return false
@@ -58,8 +58,8 @@ func start(sidecar_path : String, helper_path : String = "") -> bool:
     return true
 
 func stop() -> void:
-    if is_running():
-        _request("shutdown", {})
+    if _pid >= 0 and OS.is_process_running(_pid):
+        OS.kill(_pid)
     if is_instance_valid(_stdio):
         _stdio.close()
     _stdio = null
@@ -67,9 +67,10 @@ func stop() -> void:
         _stderr.close()
     _stderr = null
     _pid = -1
+    _hello = {}
 
 func is_running() -> bool:
-    return is_instance_valid(_stdio) and _pid >= 0
+    return is_instance_valid(_stdio) and _pid >= 0 and OS.is_process_running(_pid)
 
 func reset(scenario : Dictionary) -> void:
     _require_running()
@@ -113,6 +114,9 @@ func _request_ok(operation : String, payload : Variant) -> Dictionary:
     return result
 
 func _request(operation : String, payload : Variant) -> Dictionary:
+    if not is_running():
+        return _failure("sidecar_unavailable", "sidecar is not running")
+    last_error = {}
     _request_id += 1
     var envelope := {
         "protocol": "opensc4.adapter.v1",
@@ -120,17 +124,55 @@ func _request(operation : String, payload : Variant) -> Dictionary:
         "operation": operation,
         "payload": payload,
     }
-    _stdio.store_line(JSON.stringify(envelope))
-    _stdio.flush()
-    var line := _stdio.get_line()
-    if line.is_empty():
-        return {"ok": false, "error": {"code": "sidecar_eof", "message": "sidecar exited"}}
+    var deadline := Time.get_ticks_msec() + request_timeout_ms
+    var outgoing := (JSON.stringify(envelope, "", true, true) + "\n").to_utf8_buffer()
+    if outgoing.size() > MAX_REPLY_BYTES:
+        return _failure("sidecar_limit", "request exceeds limit")
+    var offset := 0
+    # Linux PIPE_BUF is 4096: these writes either fit completely or return
+    # EAGAIN. A single nonblocking store_line can silently write only a prefix.
+    while offset < outgoing.size():
+        var end := mini(offset + 4096, outgoing.size())
+        if _stdio.store_buffer(outgoing.slice(offset, end)):
+            offset = end
+        else:
+            if not OS.is_process_running(_pid):
+                return _failure("sidecar_eof", "sidecar exited while writing", true)
+            if Time.get_ticks_msec() >= deadline:
+                return _failure("sidecar_timeout", "sidecar write deadline exceeded", true)
+            OS.delay_msec(2)
+    var bytes := PackedByteArray()
+    while true:
+        var chunk := _stdio.get_buffer(65536)
+        if not chunk.is_empty():
+            bytes.append_array(chunk)
+            if bytes.size() > MAX_REPLY_BYTES:
+                return _failure("sidecar_limit", "response exceeds limit", true)
+            if bytes.find(10) >= 0:
+                break
+        if not OS.is_process_running(_pid):
+            return _failure("sidecar_eof", "sidecar exited", true)
+        if Time.get_ticks_msec() >= deadline:
+            return _failure("sidecar_timeout", "sidecar request deadline exceeded", true)
+        OS.delay_msec(2)
+    var line := bytes.get_string_from_utf8()
+
     var parsed = JSON.parse_string(line)
     if not parsed is Dictionary:
-        return {"ok": false, "error": {"code": "sidecar_json", "message": "invalid sidecar response"}}
+        return _failure("sidecar_json", "invalid sidecar response", true)
     if int(parsed.get("request_id", -1)) != _request_id:
-        return {"ok": false, "error": {"code": "sidecar_request_id", "message": "response id mismatch"}}
+        return _failure("sidecar_request_id", "response id mismatch", true)
+    if parsed.get("protocol", "") != "opensc4.adapter.v1":
+        return _failure("sidecar_protocol", "response protocol mismatch", true)
+    if not bool(parsed.get("ok", false)):
+        last_error = parsed.get("error", {})
     return parsed
+
+func _failure(code : String, message : String, terminate : bool = false) -> Dictionary:
+    last_error = {"code": code, "message": message}
+    if terminate:
+        stop()
+    return {"ok": false, "error": last_error}
 
 func _require_running() -> void:
     if not is_running():

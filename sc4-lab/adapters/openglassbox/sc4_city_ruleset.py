@@ -69,8 +69,8 @@ def compact_roads(roads: dict[str, Any]) -> list[tuple[tuple[float, float], tupl
     keep = {node for node in pos if kept(node)}
     seen: set[frozenset[str]] = set()
     segments = []
-    for start in keep:
-        for first, kind in adj[start]:
+    for start in sorted(keep):
+        for first, kind in sorted(adj[start]):
             if frozenset((start, first)) in seen:
                 continue
             seen.add(frozenset((start, first)))

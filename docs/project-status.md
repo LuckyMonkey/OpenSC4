@@ -4,7 +4,16 @@ Latest update: 2026-10-22. Earlier subsystem evidence below dates to
 2026-10-17 unless noted. This is a working status document, not a compatibility
 claim.
 
-## Latest milestone — settled capture and replay
+## Latest milestone — city runtime v0.2
+
+Five implementation milestones now cover validated deterministic city input,
+calendar accounting, transactional replay checkpoints, bounded helper transport,
+and Godot worker-safe save/restore/recovery. Data-free real-helper and Godot
+checks are recorded in `milestones/city-runtime-v0.2.md`. Candidate rules remain
+candidate; no new retail compatibility claim. Manual keyboard/layout review and
+large-city checkpoint responsiveness remain open.
+
+## Earlier milestone — settled capture and replay
 
 Two implementation milestones are complete: frozen ride telemetry with delayed
 month selection and settled-month funds deltas; shared replay selection that
@@ -28,7 +37,7 @@ a couple of implementation milestones are ready, as requested.
 | Region UI placement | Implemented, visual retest pending | Layout-derived legacy canvas is bottom-left anchored |
 | Simulation seam | Contract + synthetic backend smoke test | No SC4 behavior has been measured or claimed |
 | SC4 reference adapter | Not implemented | No reference observations are committed |
-| OpenGlassBox bridge | Real sidecar v0.1 | External library is exercised through the JSON-line contract; Godot runtime client pending |
+| OpenGlassBox bridge | City runtime v0.2 | Godot city integration, validated input, calendar accounting, transactional checkpoints and bounded transport; synthetic native-helper evidence |
 | Performance probe | Implemented | Windowed startup/pan/view timing tool |
 | Parser fixture smoke | Implemented | Synthetic malformed-record and UI-bound tests |
 | Spatial batching | Opt-in experiment | `OPENSC4_SPATIAL_BATCHES=1` |
@@ -85,7 +94,8 @@ a couple of implementation milestones are ready, as requested.
 - The current shutdown path reports substantial ObjectDB/resource leaks after
   the harness has completed. This is a cleanup issue, not currently a load
   failure, but it can hide future failures.
-- There is no simulation state model, save migration policy, or adapter ABI.
+- City checkpoints reject schema and engine-identity mismatches; migration across
+  versions is unsupported. Retail save simulation-state persistence remains open.
 - The reference observation adapter and independent verifier are still absent.
 - Local capture tooling exists and has completed a live metadata-only SC4 run;
   no `.sc4` save or decoded city value has been added yet.
@@ -122,9 +132,9 @@ a couple of implementation milestones are ready, as requested.
   mapping and the taxable-base function remain open.
 - OpenGlassBox has its own simulation concepts and a dual GPL/commercial
   licensing policy; dependency review is required before distribution.
-- The OpenGlassBox sidecar currently has a bounded integration slice: straight
-  roads and clock state only. Its event history is not yet persistent and it
-  is not selected by the Godot city UI.
+- The OpenGlassBox sidecar now runs candidate city traffic, pollution and
+  accounting in Godot. City checkpoint replay persists retained events, but
+  large-city restore latency and cross-version migration remain limitations.
 - The experimental road writer intentionally rejects occupied tiles and complex
   network types. A parser-valid DBPF is not yet proof that SimCity 4 accepts the
   new road or recomputes traffic/simulation state correctly.

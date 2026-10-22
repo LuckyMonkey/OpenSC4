@@ -38,7 +38,12 @@ OPENSC4_SIM=0 godot --path .       # same, without simulating
 
 In the city: **F6** pause/resume, **F7** pollution overlay, **F8** traffic
 overlay. The HUD (top right) shows day, funds, last month's tax and upkeep,
-commuters, busy road links and total air pollution.
+commuters, busy road links and total air pollution. **F9** saves a local simulation
+checkpoint; **F10** restores it and refreshes overlays. Checkpoint operations leave
+the simulation paused; F6 resumes. They operate on OpenSC4 candidate state, not
+retail `.sc4` saves. The checkpoint must match the loaded city and exact engine
+identity. Date starts at 2000-01-01 and uses Gregorian month boundaries, not a
+native save date. See `../milestones/city-runtime-v0.2.md` for limits and checks.
 
 Headless and visual checks:
 

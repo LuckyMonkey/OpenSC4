@@ -14,8 +14,10 @@ reviewable interface.
   no-pipes, missing-model, and multiple city-size cases.
 - [ ] Establish an allowed, repeatable SC4 reference observation path. Until
   then, leave reference metrics `unsupported`; never infer them from pixels.
-- [ ] Define save-version and backend-migration failures before simulation state
-  is written into player saves.
+- [x] Define fail-closed schema/engine mismatch behavior for separate candidate
+  simulation checkpoints (`milestones/city-runtime-v0.2.md`).
+- [ ] Add asynchronous checkpoint progress/cancellation and explicit migration
+  policy before broadening persistent simulation state or modifying player saves.
 
 ## P1 — next implementation milestones
 

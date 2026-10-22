@@ -8,10 +8,17 @@ protocol and converts only plain JSON data across the boundary.
 from __future__ import annotations
 
 import json
+import copy
+import datetime
+import hashlib
+import city_contract
+from pathlib import Path
+from helper_transport import HelperTransport, TransportError, terminate_with_parent
 import os
 import subprocess
 import sys
 import tempfile
+import signal
 
 import sc4_city_ruleset
 from typing import Any
@@ -19,6 +26,24 @@ from typing import Any
 PROTOCOL = "opensc4.adapter.v1"
 CONTRACT = "opensc4.simulation.v1"
 SAVE_SCHEMA = "opensc4.openglassbox-sidecar.v1"
+CITY_SAVE_SCHEMA = "opensc4.city-checkpoint.v1"
+
+def canonical_numbers(value):
+    # JSON bridges (including Godot) do not preserve integer vs float types.
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, dict):
+        return {key: canonical_numbers(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [canonical_numbers(item) for item in value]
+    return value
+
+
+def digest(value):
+    value = canonical_numbers(value)
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+
+
 DEFAULT_HELPER = "/tmp/opensc4-openglassbox-helper"
 
 
@@ -28,6 +53,10 @@ class BridgeError(Exception):
 
 class Backend:
     def __init__(self, helper: str) -> None:
+        self.helper = helper
+        self.identity = digest({"helper": hashlib.sha256(Path(helper).read_bytes()).hexdigest(),
+                                "sources": {name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
+                                            for name in ("openglassbox_sidecar.py", "sc4_city_ruleset.py", "city_contract.py")}})
         # Engine diagnostics go to a log file, never to an inherited stderr the
         # host may have closed (a closed pipe would SIGPIPE the helper).
         log_path = os.environ.get("OPENSC4_OPENGLASSBOX_LOG",
@@ -38,33 +67,40 @@ class Backend:
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=self.log,
-            text=True,
-            bufsize=1,
+            bufsize=0,
+            preexec_fn=terminate_with_parent if sys.platform == "linux" else None,
         )
+        self.transport = HelperTransport(self.process)
+        self.city = None
+        self.elapsed_days = 0
         self.roads: list[dict[str, float]] = []
         self.sequence = 0
         self.events: list[dict[str, Any]] = []
         self.commit = "unknown"
-        self._command("RESET")
-        version = self._command("VERSION")
-        self.commit = version.get("commit", "unknown")
+        try:
+            self._command("RESET")
+            version = self._command("VERSION")
+            self.commit = version.get("commit", "unknown")
+            # The helper dynamically links OGB; hashing only its executable
+            # misses replacement of that shared library between sessions.
+            if sys.platform == "linux":
+                libraries = {line.split()[-1] for line in Path(f"/proc/{self.process.pid}/maps").read_text().splitlines()
+                             if "libOpenGlassBox.so" in line}
+                if not libraries:
+                    raise BridgeError("cannot identify loaded OpenGlassBox library")
+                self.identity = digest({"adapter": self.identity,
+                                        "libraries": sorted(hashlib.sha256(Path(name).read_bytes()).hexdigest()
+                                                            for name in libraries)})
+        except Exception:
+            self.close()
+            raise
 
     def close(self) -> None:
-        if self.process.poll() is None:
-            try:
-                self._command("QUIT")
-            except BridgeError:
-                self.process.kill()
-        self.process.wait(timeout=2)
+        self.transport.close()
+        self.log.close()
 
     def _command(self, command: str) -> dict[str, Any]:
-        if self.process.stdin is None or self.process.stdout is None:
-            raise BridgeError("helper pipes unavailable")
-        self.process.stdin.write(command + "\n")
-        self.process.stdin.flush()
-        line = self.process.stdout.readline()
-        if not line:
-            raise BridgeError("OpenGlassBox helper exited")
+        line = self._raw(command)
         fields = line.strip().split()
         if not fields or fields[0] == "ERR":
             raise BridgeError("helper rejected command: " + line.strip())
@@ -97,6 +133,9 @@ class Backend:
                 "roads": [dict(road) for road in self.roads],
             }
         )
+        if self.city is not None:
+            values.update(city_mode=True, date=self.date.isoformat(), day=self.elapsed_days,
+                          funds=self.funds, elapsed_days=self.elapsed_days)
         return values
 
     def emit(self, event_type: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -112,12 +151,17 @@ class Backend:
         return event
 
     def events_since(self, cursor: int) -> list[dict[str, Any]]:
+        if cursor < 0 or cursor > self.sequence:
+            raise BridgeError("invalid_event_cursor")
         if self.events and cursor < self.events[0]["sequence"] - 1:
             raise BridgeError("event_history_gap")
         return [event for event in self.events if event["sequence"] > cursor]
 
     def reset(self, scenario: dict[str, Any]) -> list[dict[str, Any]]:
+        for road in scenario.get("roads", []):
+            city_contract.command(dict(road, type="add_road"))
         self._command("RESET")
+        self.city = None
         self.roads = []
         self.sequence = 0
         self.events = []
@@ -163,20 +207,29 @@ class Backend:
     TICKS_PER_MINUTE = 1
 
     def city_init(self, payload: dict[str, Any]) -> dict[str, Any]:
-        city = payload["city"]
+        city_contract.command(dict(payload, type="city_init"))
+        city = copy.deepcopy(payload["city"])
         script, commands, meta = sc4_city_ruleset.build(city)
         handle = tempfile.NamedTemporaryFile("w", suffix=".ogs", prefix="opensc4-city-", delete=False)
         handle.write(script)
         handle.close()
         dims = city["dimensions"]
-        self._command(f"CITY_NEW {dims['width']} {dims['height']} 1.0 {self.TICKS_PER_MINUTE} "
-                      f"{int(payload.get('seed', 1))} {handle.name}")
+        try:
+            self._command(f"CITY_NEW {int(dims['width'])} {int(dims['height'])} 1.0 {self.TICKS_PER_MINUTE} "
+                          f"{int(payload.get('seed', 1))} {handle.name}")
+        finally:
+            os.unlink(handle.name)
         anchored = 0
         for line in commands:
             values = self._command(line)
             anchored += int(values.get("anchored", 0))
         self.city = city
-        self.month_days = 0
+        self.roads = []
+        self.sequence = 0
+        self.events = []
+        self.initial_payload = copy.deepcopy(payload)
+        self.elapsed_days = 0
+        self.date = datetime.date.fromisoformat(payload.get("start_date", "2000-01-01"))
         self.funds = int(payload.get("funds", 50000))
         self.rates = [float(r) for r in payload.get("rates", [9.0] * 12)]
         self.mult = float(payload.get("mult", 1.0))
@@ -186,18 +239,23 @@ class Backend:
         return meta
 
     def city_advance(self, days: int) -> dict[str, Any]:
-        ticks = int(days) * 24 * 60 * self.TICKS_PER_MINUTE
-        stats = self._command(f"STEP {ticks}")
+        city_contract.command({"type": "city_advance", "days": days}, self.city is not None)
+        # Check calendar overflow before any native step.
+        self.date + datetime.timedelta(days=days)
         months = []
-        self.month_days += int(days)
-        while self.month_days >= 30:
-            self.month_days -= 30
-            budget = sc4_city_ruleset.monthly_budget(self.city, self.rates, self.mult)
-            self.funds += budget["tax_income"] - budget["expenses"]
-            budget["funds"] = self.funds
-            months.append(budget)
-            self.emit("month", {"funds": self.funds})
-        return {"stats": stats, "months": months, "funds": self.funds}
+        for _ in range(days):
+            stats = self._command(f"STEP {24 * 60 * self.TICKS_PER_MINUTE}")
+            previous = self.date
+            self.date += datetime.timedelta(days=1)
+            self.elapsed_days += 1
+            if self.date.month != previous.month:
+                budget = sc4_city_ruleset.monthly_budget(self.city, self.rates, self.mult)
+                self.funds += budget["tax_income"] - budget["expenses"]
+                budget.update(funds=self.funds, period=previous.strftime("%Y-%m"), date=self.date.isoformat())
+                months.append(budget)
+                self.emit("month", budget)
+        return {"stats": stats, "months": months, "funds": self.funds,
+                "day": self.elapsed_days, "date": self.date.isoformat()}
 
     def city_layer(self, name: str) -> dict[str, Any]:
         line = self._raw(f"LAYER {name}")
@@ -215,16 +273,54 @@ class Backend:
         return {"segments": segments}
 
     def _raw(self, command: str) -> str:
-        if self.process.stdin is None or self.process.stdout is None:
-            raise BridgeError("helper pipes unavailable")
-        self.process.stdin.write(command + "\n")
-        self.process.stdin.flush()
-        line = self.process.stdout.readline().strip()
-        if not line or line.startswith("ERR"):
+        try:
+            line = self.transport.exchange(command).strip()
+        except TransportError as exc:
+            raise BridgeError(str(exc)) from exc
+        if not line.startswith("OK"):
             raise BridgeError("helper rejected command: " + line)
         return line
 
+    def checkpoint_observation(self):
+        return {"stats": self._command("CITY_STATS"), "layer": self.city_layer("AirPollution"),
+                "traffic": self.city_traffic(), "date": self.date.isoformat(), "funds": self.funds}
+
+    def restore_city(self, state):
+        state = canonical_numbers(state)
+        # Called only on a new disposable backend. Failure leaves the active one intact.
+        if state.get("schema") != CITY_SAVE_SCHEMA or state.get("identity") != self.identity:
+            raise BridgeError("checkpoint schema or engine identity mismatch")
+        body = {key: value for key, value in state.items() if key != "digest"}
+        if digest(body) != state.get("digest"):
+            raise BridgeError("checkpoint integrity mismatch")
+        days = state["elapsed_days"]
+        city_contract.number(days, 0, 3660, "checkpoint replay days", True)
+        self.city_init(state["initial"])
+        remaining = int(days)
+        while remaining:
+            step = min(remaining, 366)
+            self.city_advance(step)
+            remaining -= step
+        if digest(self.checkpoint_observation()) != state["observation_digest"]:
+            raise BridgeError("checkpoint replay diverged")
+        events, sequence = state["events"], state["sequence"]
+        if (not isinstance(sequence, int) or sequence < 0 or not isinstance(events, list)
+                or len(events) > 256
+                or [event["sequence"] for event in events] != list(range(sequence - len(events) + 1, sequence + 1))):
+            raise BridgeError("checkpoint event history invalid")
+        self.events, self.sequence = copy.deepcopy(events), sequence
+        return True
+
     def save(self) -> dict[str, Any]:
+        if self.city is not None:
+            if self.elapsed_days > 3660:
+                raise BridgeError("checkpoint replay limit exceeded")
+            state = {"schema": CITY_SAVE_SCHEMA, "identity": self.identity,
+                     "initial": copy.deepcopy(self.initial_payload), "elapsed_days": self.elapsed_days,
+                     "events": copy.deepcopy(self.events), "sequence": self.sequence,
+                     "observation_digest": digest(self.checkpoint_observation())}
+            state["digest"] = digest(state)
+            return state
         snapshot = self.snapshot()
         return {
             "schema": SAVE_SCHEMA,
@@ -237,6 +333,7 @@ class Backend:
         if state.get("schema") != SAVE_SCHEMA or int(state.get("api_version", -1)) != 1:
             return False
         self._command("RESET")
+        self.city = None
         self.roads = []
         self.sequence = 0
         self.events = []
@@ -259,6 +356,10 @@ def response(request_id: Any, ok: bool, result: Any = None, error: str = "") -> 
 def main() -> int:
     helper = os.environ.get("OPENSC4_OPENGLASSBOX_HELPER", DEFAULT_HELPER)
     backend = Backend(helper)
+    def terminate(_signum, _frame):
+        backend.close()
+        raise SystemExit(0)
+    signal.signal(signal.SIGTERM, terminate)
     try:
         for line in sys.stdin:
             request_id: Any = None
@@ -287,15 +388,23 @@ def main() -> int:
                             "rulesets": ["sc4-tax-v0.3"],
                         },
                         "save_schema": SAVE_SCHEMA,
+                        "city_save_schema": CITY_SAVE_SCHEMA,
+                        "engine_identity": backend.identity,
                     }
                 elif operation == "reset":
                     events = backend.reset(payload if isinstance(payload, dict) else {})
                     result = {"snapshot": backend.snapshot(), "event_cursor": backend.sequence, "events": events}
                 elif operation == "validate_command":
                     kind = payload.get("type") if isinstance(payload, dict) else None
-                    accepted = kind in {"add_road", "budget_set", "budget_month"}
-                    result = {"accepted": accepted, "type": kind} if accepted else {"accepted": False, "error": "unknown_command"}
+                    try:
+                        city_contract.command(payload, backend.city is not None)
+                        accepted = True
+                    except (ValueError, TypeError, KeyError) as exc:
+                        result = {"accepted": False, "error": str(exc)}
+                        accepted = False
+                    result = {"accepted": True, "type": kind} if accepted else result
                 elif operation == "command":
+                    city_contract.command(payload, backend.city is not None)
                     kind = payload.get("type") if isinstance(payload, dict) else None
                     if kind == "add_road":
                         event = backend.add_road(payload)
@@ -304,7 +413,15 @@ def main() -> int:
                         event = backend.budget_set(payload)
                         result = {"accepted": True, "events": [event]}
                     elif kind == "city_init":
-                        result = {"accepted": True, "city": backend.city_init(payload)}
+                        candidate = Backend(helper)
+                        try:
+                            city_result = candidate.city_init(payload)
+                        except Exception:
+                            candidate.close()
+                            raise
+                        backend.close()
+                        backend = candidate
+                        result = {"accepted": True, "city": city_result}
                     elif kind == "city_advance":
                         result = {"accepted": True, **backend.city_advance(int(payload.get("days", 1)))}
                     elif kind == "city_layer":
@@ -317,6 +434,9 @@ def main() -> int:
                         raise BridgeError("unknown_command")
                 elif operation == "advance":
                     seconds = float(payload.get("seconds", 0.0))
+                    city_contract.number(seconds, 0, 86400, "seconds")
+                    if backend.city is not None:
+                        raise BridgeError("use city_advance in city mode")
                     if seconds < 0.0:
                         raise BridgeError("negative_time")
                     events = backend.advance(seconds)
@@ -331,8 +451,18 @@ def main() -> int:
                 elif operation == "save":
                     result = backend.save()
                 elif operation == "load":
-                    accepted = backend.load(payload if isinstance(payload, dict) else {})
-                    result = {"accepted": accepted, "snapshot": backend.snapshot()}
+                    candidate = Backend(helper)
+                    try:
+                        accepted = (candidate.restore_city(payload) if payload.get("schema") == CITY_SAVE_SCHEMA
+                                    else candidate.load(payload))
+                        if not accepted:
+                            raise BridgeError("unsupported save schema")
+                    except Exception:
+                        candidate.close()
+                        raise
+                    backend.close()
+                    backend = candidate
+                    result = {"accepted": True, "snapshot": backend.snapshot()}
                 elif operation == "shutdown":
                     result = {"accepted": True}
                     print(json.dumps(response(request_id, True, result), sort_keys=True), flush=True)
@@ -340,7 +470,7 @@ def main() -> int:
                 else:
                     raise BridgeError("unknown_operation")
                 print(json.dumps(response(request_id, True, result), sort_keys=True), flush=True)
-            except (BridgeError, KeyError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            except (BridgeError, OSError, KeyError, ValueError, TypeError, OverflowError, AttributeError, json.JSONDecodeError) as exc:
                 print(json.dumps(response(request_id, False, error=str(exc)), sort_keys=True), flush=True)
     finally:
         backend.close()

@@ -29,6 +29,10 @@ var last_budget : Dictionary = {}
 var last_stats : Dictionary = {}
 var pollution_total := 0
 var busy_segments := 0
+var simulation_date := "2000-01-01"
+var failure := ""
+var _generation := 0
+var checkpoint_path := "user://city-simulation-checkpoint.json"
 var _city : Node
 # One worker thread owns the sidecar pipe while running (a game day of a large
 # city takes seconds of OpenGlassBox time). Results reach the main thread via
@@ -41,6 +45,9 @@ var _pollution_mesh : MeshInstance3D
 var _traffic_mesh : MeshInstance3D
 
 func start(city : Node, savefile : DBPF, tiles_u : int, tiles_v : int, heights : Array = [], threaded : bool = true) -> bool:
+    _stop_requested = false
+    _generation += 1
+    failure = ""
     _city = city
     _heights = heights
     var t0 := Time.get_ticks_msec()
@@ -58,6 +65,7 @@ func start(city : Node, savefile : DBPF, tiles_u : int, tiles_v : int, heights :
             "rates": [9.0, 9.0, 9.0, 9.0, 9.0, 9.0, 9.0, 9.0, 9.0, 9.0, 9.0, 9.0], "mult": 1.0})
     if not bool(reply.get("accepted", false)):
         push_error("CitySim: city_init rejected: %s" % reply)
+        backend.stop()
         return false
     funds = start_funds
     _build_views()
@@ -70,6 +78,7 @@ func start(city : Node, savefile : DBPF, tiles_u : int, tiles_v : int, heights :
 
 func stop() -> void:
     running = false
+    _generation += 1
     _stop_requested = true
     if _thread != null and _thread.is_started():
         _thread.wait_to_finish()
@@ -85,14 +94,30 @@ func _exit_tree() -> void:
 ## Safe to call from the worker thread (touches only the backend).
 func step_day() -> Dictionary:
     var reply := backend.apply_command({"type": "city_advance", "days": 1})
-    var layer : Dictionary = backend.apply_command({"type": "city_layer", "name": "AirPollution"}).get("layer", {})
-    var segments : Array = backend.apply_command({"type": "city_traffic"}).get("traffic", {}).get("segments", [])
+    if not bool(reply.get("accepted", false)):
+        return {"error": str(backend.last_error)}
+    var layer_reply := backend.apply_command({"type": "city_layer", "name": "AirPollution"})
+    if not bool(layer_reply.get("accepted", false)):
+        return {"error": str(backend.last_error)}
+    var traffic_reply := backend.apply_command({"type": "city_traffic"})
+    if not bool(traffic_reply.get("accepted", false)):
+        return {"error": str(backend.last_error)}
+    var layer : Dictionary = layer_reply.get("layer", {})
+    var segments : Array = traffic_reply.get("traffic", {}).get("segments", [])
     return {"reply": reply, "layer": layer, "segments": segments}
 
 ## Main thread: fold one stepped day into state and redraw.
-func apply_day(result : Dictionary) -> void:
+func apply_day(result : Dictionary, generation : int = -1) -> void:
+    if generation >= 0 and generation != _generation:
+        return
+    if result.has("error"):
+        failure = str(result.error)
+        running = false
+        _update_hud()
+        return
     var reply : Dictionary = result.get("reply", {})
-    day += 1
+    day = int(reply.get("day", day + 1))
+    simulation_date = str(reply.get("date", simulation_date))
     last_stats = reply.get("stats", {})
     funds = int(reply.get("funds", funds))
     for month in reply.get("months", []):
@@ -105,13 +130,16 @@ func apply_day(result : Dictionary) -> void:
     _update_hud()
 
 func _worker() -> void:
+    var generation := _generation
     while not _stop_requested:
         if not running:
             OS.delay_msec(100)
             continue
         var started := Time.get_ticks_msec()
         var result := step_day()
-        call_deferred("apply_day", result)
+        call_deferred("apply_day", result, generation)
+        if result.has("error"):
+            running = false
         var spare := int(seconds_per_day * 1000.0) - (Time.get_ticks_msec() - started)
         if spare > 0:
             OS.delay_msec(spare)
@@ -119,9 +147,92 @@ func _worker() -> void:
 func _unhandled_input(event : InputEvent) -> void:
     if event is InputEventKey and event.pressed and not event.echo:
         match event.keycode:
-            KEY_F6: running = not running; _update_hud()
+            KEY_F6:
+                if failure.is_empty():
+                    running = not running
+                _update_hud()
+            KEY_F9: save_checkpoint()
+            KEY_F10: restore_checkpoint()
             KEY_F7: if _pollution_mesh: _pollution_mesh.visible = not _pollution_mesh.visible
             KEY_F8: if _traffic_mesh: _traffic_mesh.visible = not _traffic_mesh.visible
+
+# Join the sole pipe owner before checkpoint I/O. Deferred results from that
+# worker are invalidated, then display state is refreshed from the backend.
+func _join_worker() -> void:
+    running = false
+    _stop_requested = true
+    if _thread != null and _thread.is_started():
+        _thread.wait_to_finish()
+    _thread = null
+    _generation += 1
+
+func _resume_worker() -> void:
+    _stop_requested = false
+    _thread = Thread.new()
+    _thread.start(_worker)
+
+func _refresh_checkpoint_view() -> void:
+    var state := backend.snapshot()
+    if state.is_empty():
+        failure = str(backend.last_error)
+        return
+    day = int(state.get("elapsed_days", day))
+    simulation_date = str(state.get("date", simulation_date))
+    funds = int(state.get("funds", funds))
+    var layer_reply := backend.apply_command({"type": "city_layer", "name": "AirPollution"})
+    var traffic_reply := backend.apply_command({"type": "city_traffic"})
+    if not bool(layer_reply.get("accepted", false)) or not bool(traffic_reply.get("accepted", false)):
+        failure = str(backend.last_error)
+        return
+    var layer : Dictionary = layer_reply.get("layer", {})
+    pollution_total = int(layer.get("total", 0))
+    _draw_pollution(layer)
+    _draw_traffic(traffic_reply.get("traffic", {}).get("segments", []))
+    last_budget = {}
+    last_stats = state
+
+func save_checkpoint() -> bool:
+    if backend == null:
+        return false
+    _join_worker()
+    var state := backend.save_state()
+    var success := false
+    if not state.is_empty():
+        var file := FileAccess.open(checkpoint_path + ".tmp", FileAccess.WRITE)
+        if file != null:
+            file.store_string(JSON.stringify(state, "", true, true))
+            file.flush()
+            var write_error := file.get_error()
+            file.close()
+            if write_error == OK:
+                success = DirAccess.rename_absolute(ProjectSettings.globalize_path(checkpoint_path + ".tmp"),
+                    ProjectSettings.globalize_path(checkpoint_path)) == OK
+    failure = "" if success else "Checkpoint save failed: %s" % backend.last_error
+    _refresh_checkpoint_view()
+    _resume_worker()
+    _update_hud()
+    return success
+
+func restore_checkpoint() -> bool:
+    if backend == null:
+        return false
+    _join_worker()
+    var parsed = JSON.parse_string(FileAccess.get_file_as_string(checkpoint_path))
+    var success := false
+    if parsed is Dictionary:
+        # A checkpoint belongs to this loaded city's geometry, not another map.
+        var saved_city : Dictionary = parsed.get("initial", {}).get("city", {})
+        var normalized_city : Dictionary = JSON.parse_string(JSON.stringify(city_model, "", true, true))
+        if saved_city == normalized_city:
+            if not backend.is_running():
+                backend.start(SIDECAR)
+            success = backend.load_state(parsed)
+    failure = "" if success else "Checkpoint restore rejected: %s" % backend.last_error
+    if success:
+        _refresh_checkpoint_view()
+    _resume_worker()
+    _update_hud()
+    return success
 
 # -- views ---------------------------------------------------------------------
 
@@ -165,9 +276,12 @@ func _draw_pollution(layer : Dictionary) -> void:
     if w == 0 or data.is_empty():
         _pollution_mesh.mesh = null
         return
-    var peak := 1
+    var peak := 0
     for v in data:
         peak = maxi(peak, int(v))
+    if peak == 0:
+        _pollution_mesh.mesh = null
+        return
     var st := SurfaceTool.new()
     st.begin(Mesh.PRIMITIVE_TRIANGLES)
     for idx in data.size():
@@ -240,6 +354,9 @@ func _update_hud() -> void:
         return
     var lines := PackedStringArray()
     lines.append("SIM %s   day %d   (F6 pause, F7 pollution, F8 traffic)" % ["RUNNING" if running else "PAUSED", day])
+    lines.append("%s   F9 save checkpoint / F10 restore" % simulation_date)
+    if not failure.is_empty():
+        lines.append("SIM ERROR: %s" % failure)
     lines.append("Funds  §%s" % _thousands(funds))
     if not last_budget.is_empty():
         lines.append("Last month  tax §%s  upkeep §%s   [tax rule TAX_001 verified; bases placeholder]" % [

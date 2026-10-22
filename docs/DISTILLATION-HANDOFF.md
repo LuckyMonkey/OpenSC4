@@ -5,6 +5,16 @@ Updated 2026-10-22 (native evidence remains dated 2026-10-17). Branch `improve-u
 
 ## Resume here — 2026-10-22
 
+Five substantive city-runtime milestones are now implemented and exercised:
+validated deterministic input, calendar accounting, transactional checkpoints,
+bounded helper transport, and Godot worker-safe checkpoint recovery. Read
+`docs/milestones/city-runtime-v0.2.md` for evidence, commands and limits. F9 saves,
+F10 restores, and F6 resumes after a checkpoint action. Tests use synthetic cities;
+no retail game process was touched. Next runtime work is asynchronous checkpoint
+progress/cancellation and versioned mutation replay. Native SC4 base construction
+and live settled-capture validation remain separate open tracks.
+
+
 - Completed settled capture and gap-aware replay implementation; see
   `docs/milestones/sc4-settled-capture-v0.1.md`.
 - Synthetic selection checks and Python compilation passed after both

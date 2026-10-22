@@ -188,6 +188,15 @@ commands, advancement, snapshots, events, and save/load to the plain
 `SimulationBackend` contract. The headless smoke path passes. It is not yet
 selected by the city UI and still uses a bridge-specific straight-road slice.
 
+### E3.6: reliable city runtime (done, 2026-10-22)
+
+Validated deterministic canonical input; Gregorian daily/monthly accounting;
+versioned transactional replay checkpoints; bounded native/Godot transport; and
+worker-safe F9/F10 checkpoints with failed-step recovery. Evidence and limits:
+`milestones/city-runtime-v0.2.md`. The city UI now runs the sidecar; older E3.5
+notes above describe its initial smoke-only integration. Asynchronous checkpoint
+progress and migration across engine versions remain future work.
+
 ### E4: Native OpenGlassBox integration (later)
 
 Replace the JSON process boundary with a narrow GDExtension only after the
