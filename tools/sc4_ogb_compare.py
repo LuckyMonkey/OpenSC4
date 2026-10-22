@@ -25,6 +25,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from sc4_month_sampling import SettledMonths, consecutive
+
 REPO = Path(__file__).resolve().parents[1]
 SIDECAR = REPO / "sc4-lab" / "adapters" / "openglassbox" / "openglassbox_sidecar.py"
 REPORT_SCHEMA = "sc4-lab.sc4-ogb-compare.v1"
@@ -61,19 +63,12 @@ def settled_months(samples: list[dict[str, Any]], settle_days: int) -> list[dict
     inputs seen in it (for example a rate poked mid-month) may differ from the
     inputs that produced its published tax.
     """
-    months: list[dict[str, Any]] = []
-    current = None
-    first_serial = None
-    taken = True
+    selector = SettledMonths(settle_days)
+    months = []
     for row in samples:
-        key = (row["simulation_year"], row["simulation_month"])
-        if key != current:
-            observed_rollover = current is not None
-            current, first_serial, taken = key, row["simulation_date_serial"], not observed_rollover
-            continue
-        if not taken and row["simulation_date_serial"] - first_serial >= settle_days:
-            months.append(row)
-            taken = True
+        settled = selector.push(row)
+        if settled is not None:
+            months.append(settled)
     return months
 
 
@@ -91,6 +86,8 @@ def main() -> int:
     ap.add_argument("--expenses", type=int, help="fixed monthly expense for the open-loop funds model (default: first clean month)")
     ap.add_argument("--out", type=Path)
     args = ap.parse_args()
+    if args.settle_days < 1:
+        ap.error("--settle-days must be at least 1")
 
     meta = json.loads((args.ride / "ride.json").read_text())
     samples = [json.loads(line) for line in (args.ride / "samples.jsonl").read_text().splitlines()]
@@ -98,6 +95,10 @@ def main() -> int:
     months = settled_months(samples, args.settle_days)
     if len(months) < 2:
         raise SystemExit("need at least two settled months")
+    for previous, month in zip(months, months[1:]):
+        if (not consecutive(previous, month)
+                or previous["sampling_segment"] != month["sampling_segment"]):
+            raise SystemExit("capture has skipped or rewound settled months; replay a continuous segment")
     mult = float(meta.get("mult", 1.0))
     expenses = args.expenses
     if expenses is None:
@@ -109,7 +110,7 @@ def main() -> int:
         ogb_funds = months[0]["funds_public"]
         for previous, month in zip(months, months[1:]):
             # tax: SC4's own inputs for this month (rates/bases as settled after rollover)
-            sidecar.call("command", {"type": "budget_set", "funds": ogb_funds, "expenses": expenses, "mult": mult,
+            sidecar.call("command", {"type": "budget_set", "funds": ogb_funds, "expenses": expenses, "mult": month.get("tax_multiplier", mult),
                                      "rates": month["tax_rates"], "bases": month["tax_category_totals"]})
             budget = sidecar.call("command", {"type": "budget_month", "days": days_in_previous_month(month)})["budget"]
             ogb_funds = budget["funds"]

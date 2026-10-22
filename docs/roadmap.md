@@ -140,6 +140,13 @@ eight-second running interval. The next gate is a typed scan driven by one
 visible treasury/date/population value, followed by save/reload and restart
 validation.
 
+### D3.9: settled ride capture and replay (implemented 2026-10-22)
+
+Ride sampling now freezes telemetry reads and waits three game days after an
+observed rollover. Funds deltas use consecutive settled months. Replay shares
+month selection and rejects gaps or rewinds. Synthetic checks passed; live
+SC4 verification is pending. See `milestones/sc4-settled-capture-v0.1.md`.
+
 ### D4: power corpus (next after D3)
 
 Run one plant, altered demand, funding changes, and two-plant cases. Record

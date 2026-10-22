@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Long-running SC4 experiment: hold tax rates by memory write and record everything.
 
-Each sample (default 0.5 s) records the clock plus budget telemetry. At every
-month rollover it checks the v0.3 tax equation against the game's published
+Each sample (default 0.5 s) records the clock plus budget telemetry. After each observed
+month rollover settles it checks the v0.3 tax equation against the game's published
 tax income, appends one row to ``months.jsonl``, re-asserts the held tax
 rates, and takes a frozen full-memory dump compressed with zstd (skipped when
 free disk falls under ``--min-free-gib``). All output stays outside Git.
@@ -29,6 +29,7 @@ from pathlib import Path
 import sc4_budget_probe
 import sc4_clock_probe
 import sc4_dynamic
+from sc4_month_sampling import SettledMonths, consecutive
 
 
 def mult_table(handle: int, budget: int, k: int) -> float:
@@ -64,6 +65,7 @@ def main() -> int:
     ap.add_argument("--rates", type=float, nargs="+", required=True, help="one rate for all 12 categories, or 12 rates")
     ap.add_argument("--hours", type=float, default=2.0)
     ap.add_argument("--interval", type=float, default=0.5)
+    ap.add_argument("--settle-days", type=int, default=3, help="game days to wait after observing a rollover")
     ap.add_argument("--dump-every", type=int, default=1, help="dump every N month rollovers (0 = never)")
     ap.add_argument("--min-free-gib", type=float, default=20.0)
     ap.add_argument("--out", type=Path, default=sc4_dynamic.DEFAULT_ROOT / time.strftime("ride-%Y%m%dT%H%M%S"))
@@ -73,6 +75,9 @@ def main() -> int:
     rates = args.rates * 12 if len(args.rates) == 1 else args.rates
     if len(rates) != 12 or not all(0 <= r <= 100 for r in rates):
         raise SystemExit("give 1 or 12 rates in 0..100")
+    if args.interval <= 0 or args.hours <= 0 or args.dump_every < 0:
+        raise SystemExit("interval/hours must be positive and dump-every nonnegative")
+    selector = SettledMonths(args.settle_days)
     out = sc4_dynamic.outside_repo(args.out)
     out.mkdir(parents=True, exist_ok=True)
     stop = {"flag": False}
@@ -86,7 +91,9 @@ def main() -> int:
     mult = mult_table(handle, budget, k)
     original = write_rates(args.pid, budget, rates)
     meta = {"started": sc4_dynamic.utc_now(), "pid": args.pid, "held_rates": rates, "original_rates": original,
-            "difficulty_index": k, "mult": mult, "interval": args.interval}
+            "difficulty_index": k, "mult": mult, "interval": args.interval,
+            "sampling_schema": "sc4-lab.settled-months.v1", "settle_days": args.settle_days,
+            "frozen_samples": True}
     (out / "ride.json").write_text(json.dumps(meta, indent=2) + "\n")
     print(json.dumps({"out": str(out), **meta}), flush=True)
 
@@ -102,14 +109,24 @@ def main() -> int:
                 print("SC4 process exited", flush=True)
                 break
             try:
-                metrics = dict(sc4_budget_probe.sample(handle, args.pid, base)["metrics"])
-                metrics.update(sc4_clock_probe.sample(handle, args.pid, base)["metrics"])
+                with sc4_dynamic.Frozen(args.pid):
+                    metrics = dict(sc4_budget_probe.sample(handle, args.pid, base)["metrics"])
+                    metrics.update(sc4_clock_probe.sample(handle, args.pid, base)["metrics"])
+                    budget = sc4_budget_probe.read_value(handle, base + sc4_budget_probe.BUDGET_GLOBAL_RVA, "<I")
+                    k = difficulty(handle, budget)
+                    mult = mult_table(handle, budget, k)
+                    metrics["tax_multiplier"] = mult
             except Exception as exc:  # transient during load screens
                 samples.write(json.dumps({"t": time.time(), "error": str(exc)}) + "\n")
                 time.sleep(args.interval)
                 continue
             samples.write(json.dumps({"t": round(time.time(), 3), **metrics}) + "\n")
-            if previous and metrics["simulation_month"] != previous["simulation_month"]:
+            settled = selector.push(metrics)
+            if settled is not None:
+                metrics = settled
+                comparable = (previous is not None and consecutive(previous, metrics)
+                              and previous["sampling_segment"] == metrics["sampling_segment"])
+                funds_delta = metrics["funds_public"] - previous["funds_public"] if comparable else None
                 rollovers += 1
                 predicted = predict(metrics, mult)
                 row = {
@@ -118,8 +135,12 @@ def main() -> int:
                     "predicted": round(predicted, 3),
                     "residual": metrics["tax_income"] - math.trunc(predicted),
                     "funds": metrics["funds_public"],
-                    "funds_delta": metrics["funds_public"] - previous["funds_public"],
-                    "expenses": metrics["tax_income"] - (metrics["funds_public"] - previous["funds_public"]),
+                    "funds_delta": funds_delta,
+                    "expenses": metrics["tax_income"] - funds_delta if comparable else None,
+                    "sampling_segment": metrics["sampling_segment"],
+                    "simulation_date_serial": metrics["simulation_date_serial"],
+                    "mult": mult,
+                    "funds_comparable": comparable,
                     "bases": metrics["tax_category_totals"],
                     "rates": metrics["tax_rates"],
                 }
@@ -142,9 +163,11 @@ def main() -> int:
                 months.write(json.dumps(row) + "\n")
                 print(json.dumps({k2: row[k2] for k2 in ("date", "tax_income", "predicted", "residual", "funds_delta", "expenses")}
                                  | {"base_sum": sum(row["bases"])}), flush=True)
-            previous = metrics
+                previous = metrics
             time.sleep(args.interval)
     finally:
+        samples.close()
+        months.close()
         os.close(handle)
         for proc in compressors:
             proc.wait()

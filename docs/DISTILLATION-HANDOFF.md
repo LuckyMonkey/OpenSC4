@@ -1,7 +1,22 @@
 # SC4 behavioral distillation — handoff, runbook, roadmap
 
-Snapshot 2026-10-17. Branch `improve-ultrawide-and-city-bootstrap` of
+Updated 2026-10-22 (native evidence remains dated 2026-10-17). Branch `improve-ultrawide-and-city-bootstrap` of
 [LuckyMonkey/OpenSC4](https://github.com/LuckyMonkey/OpenSC4).
+
+## Resume here — 2026-10-22
+
+- Completed settled capture and gap-aware replay implementation; see
+  `docs/milestones/sc4-settled-capture-v0.1.md`.
+- Synthetic selection checks and Python compilation passed after both
+  milestones. Retail SC4, Godot, and OpenGlassBox were not launched.
+- Next phase: validate at least three live month transitions with no spending
+  in a disposable city, then run offline comparison. Use the milestone's
+  commands with the actual PID and output path. The ride command changes tax
+  rates; choose the intended experiment rates explicitly.
+- Live validation is the remaining evidence gap. Do not promote this sampling
+  heuristic to verified atomic budget publication without that evidence.
+- User preference: complete a couple of implementation milestones before
+  spending time on tests; avoid broad renderer runs for Python-only work.
 
 ## 1. What this is
 
@@ -231,8 +246,11 @@ claude mcp add rea \
 
 ## 9. Roadmap (in priority order)
 
-1. **Fix the ride tool's two artifacts** (funds lag, in-place base rebuild)
-   so every month row is trustworthy.
+1. **Ride capture artifacts: implementation complete, live validation pending**
+   (2026-10-22). Frozen telemetry, delayed month selection, settled funds deltas,
+   and gap-aware replay are implemented. See
+   `docs/milestones/sc4-settled-capture-v0.1.md`; next validate three live
+   rollovers before treating these rows as authoritative.
 2. **Who builds the bases?** Watch writes to `budget+0xE0` and reads inside
    `0x00691E20`: enumerate the record container it iterates (budget-owned,
    per-building?), the virtual methods it calls for record inputs, and the

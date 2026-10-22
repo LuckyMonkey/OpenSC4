@@ -1,7 +1,21 @@
 # Project status
 
-Snapshot: 2026-10-17. This is a working status document, not a compatibility
+Latest update: 2026-10-22. Earlier subsystem evidence below dates to
+2026-10-17 unless noted. This is a working status document, not a compatibility
 claim.
+
+## Latest milestone — settled capture and replay
+
+Two implementation milestones are complete: frozen ride telemetry with delayed
+month selection and settled-month funds deltas; shared replay selection that
+rejects skipped or rewound month sequences. Synthetic edge checks, Python
+compilation, and diff checks passed after both implementations were complete.
+Retail SC4 validation remains pending; no game process was changed. See
+`milestones/sc4-settled-capture-v0.1.md` for commands and limitations.
+
+Next: capture at least three live month transitions in a disposable city, then
+compare settled rows with offline replay. Continue deferring broad tests until
+a couple of implementation milestones are ready, as requested.
 
 ## Verified today
 
