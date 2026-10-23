@@ -1,8 +1,37 @@
 # Project status
 
-Latest update: 2026-10-22. Earlier subsystem evidence below dates to
+Latest update: 2026-10-23. Earlier subsystem evidence below dates to
 2026-10-17 unless noted. This is a working status document, not a compatibility
 claim.
+
+## Original city asset integration
+
+The city now loads 12 original control textures directly from the user's DATs:
+camera panel, zoom/rotation, pause/speed, transport and region controls. The export
+panel starts collapsed. A real-city interaction harness passes, including three
+viewport sizes. A repeatable local inventory covers 281 layouts and the UI,
+terrain, lot-ground and shared network/model texture groups. See
+`milestones/original-city-assets-v0.1.md` for counts, limits and next steps.
+Terrain/road materials already load original textures; matching all original
+blending, connectivity, tools and save behavior remains unfinished.
+
+## Latest work — responsive checkpoints and reliable startup failures
+
+F9/F10 now queue checkpoint work on the sole pipe-owning worker, with main-thread
+completion polling, elapsed-time status, concurrent-request rejection and paused
+completion. Restore handles malformed/foreign/oversized files without replacing
+the city; file-write diagnostics survive display refresh. Synthetic Godot checks
+verify frame processing during delayed save/replay and failure-state retention.
+See `milestones/city-runtime-v0.3.md`.
+
+After a host reboot, all six archives and the tutorial save read successfully.
+The real-city camera sweep completed; its network-index overrun exposed an unsafe
+structured decoder. Bounded reads/counts now reject incomplete layouts and retain
+the reference scan, with truncated-prefix/oversized-count regression coverage.
+The 3,427-building tutorial passed asynchronous save/advance/restore: save 1.07 s
+(111 processed frames), restore 2.41 s (339 frames), matching day/funds/pollution.
+Startup harnesses also fail immediately on unreadable assets instead of reporting
+success. Existing shutdown resource leaks remain open.
 
 ## Latest milestone — city runtime v0.2
 

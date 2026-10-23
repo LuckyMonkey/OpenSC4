@@ -1,5 +1,18 @@
 extends Node
 
+class SlowCheckpoint extends CitySim:
+    func _checkpoint_io(operation : String, path : String, model : Dictionary) -> Dictionary:
+        OS.delay_msec(200)
+        return super._checkpoint_io(operation, path, model)
+
+func await_checkpoint(sim : CitySim) -> int:
+    var frames := 0
+    var deadline := Time.get_ticks_msec() + 10000
+    while not sim._checkpoint_operation.is_empty() and Time.get_ticks_msec() < deadline:
+        await get_tree().process_frame
+        frames += 1
+    return frames if sim._checkpoint_operation.is_empty() else -1
+
 func _ready() -> void:
     call_deferred("run")
 
@@ -39,7 +52,7 @@ func run() -> void:
     if not check(backend.snapshot() == before, "restore failure preserves state"):
         backend.stop()
         return
-    var sim := CitySim.new()
+    var sim := SlowCheckpoint.new()
     add_child(sim)
     sim.backend = backend
     sim.city_model = city
@@ -72,8 +85,44 @@ func run() -> void:
     if not check(sim.restore_checkpoint() and sim.failure.is_empty(), "recover after sidecar exit"):
         sim.stop()
         return
+    sim.running = true
+    if not check(sim.request_checkpoint("save"), "async save accepted"):
+        sim.stop()
+        return
+    if not check(not sim.request_checkpoint("restore") and not sim.save_checkpoint(), "concurrent requests rejected"):
+        sim.stop()
+        return
+    var frames := await await_checkpoint(sim)
+    if not check(frames > 2 and sim.failure.is_empty() and not sim.running, "save keeps rendering and finishes paused"):
+        sim.stop()
+        return
+    var async_day := sim.day
+    sim._join_worker()
+    sim.apply_day(sim.step_day())
+    sim._resume_worker()
+    sim.request_checkpoint("restore")
+    frames = await await_checkpoint(sim)
+    if not check(frames > 2 and sim.failure.is_empty() and sim.day == async_day, "async restore refreshes state"):
+        sim.stop()
+        return
+    for invalid in ["{broken", '{"initial": []}', '{"initial": {"city": {}}}']:
+        var file := FileAccess.open(sim.checkpoint_path, FileAccess.WRITE)
+        file.store_string(invalid)
+        file.close()
+        sim.request_checkpoint("restore")
+        await await_checkpoint(sim)
+        if not check(not sim.failure.is_empty() and sim.day == async_day and backend.is_running(), "malformed/foreign restore preserves city"):
+            sim.stop()
+            return
+    sim.checkpoint_path += "/missing/checkpoint.json"
+    sim.request_checkpoint("save")
+    await await_checkpoint(sim)
+    if not check(sim.failure.contains("temporary file") and sim.day == async_day, "file failure preserves diagnostic and state"):
+        sim.stop()
+        return
+    sim.checkpoint_path = "/tmp/opensc4-checkpoint-smoke-%d.json" % OS.get_process_id()
     sim.stop()
     DirAccess.remove_absolute(sim.checkpoint_path)
     sim.queue_free()
-    print("CITY CHECKPOINT GODOT PASS: large payload, calendar, JSON roundtrip, transactional rejection, worker join, stale results, exit recovery")
+    print("CITY CHECKPOINT GODOT PASS: large payload, calendar, JSON roundtrip, transactional rejection, worker join, stale results, exit recovery, responsive async save/restore, request exclusion, malformed/foreign/file failure")
     get_tree().quit(0)

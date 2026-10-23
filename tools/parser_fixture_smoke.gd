@@ -46,6 +46,37 @@ func _ready() -> void:
     if not _expect(base._find_marker(0, 4, 0x44332211) == -1, "short scan bound"):
         return
 
+    # Version 6 empty network index: every truncated prefix and oversized
+    # count must stay fail-closed, including reads which land exactly at EOF.
+    var network_bytes := PackedByteArray()
+    network_bytes.resize(60)
+    network_bytes.encode_u32(0, 60)
+    network_bytes.encode_u16(12, 6)
+    network_bytes.encode_u32(14, 16384)
+    var network := NetworkIndexSubfile.new(null)
+    network.major = 6
+    network.city_tile_count = 16384
+    network.raw_data = network_bytes
+    network._decode_structured_index()
+    if not _expect(network.structured_decode_ok, "complete empty network index"):
+        return
+    for length in range(network_bytes.size()):
+        network.raw_data = network_bytes.slice(0, length)
+        network._decode_structured_index()
+        if not _expect(not network.structured_decode_ok and network.tiles.is_empty(), "truncated network index %d" % length):
+            return
+    for count_offset in [18, 22, 26, 56]:
+        network.raw_data = network_bytes.duplicate()
+        network.raw_data.encode_u32(count_offset, 0xffffffff)
+        network._decode_structured_index()
+        if not _expect(not network.structured_decode_ok, "oversized network count"):
+            return
+    network.raw_data = network_bytes.duplicate()
+    network.raw_data.append(0)
+    network._decode_structured_index()
+    if not _expect(not network.structured_decode_ok, "network trailing data rejected"):
+        return
+
     # Layout bounds must ignore unrelated parenthesized values and retain the
     # historical 800x600 minimum.
     var ui = SC4UISubfileScript.new(null)

@@ -13,6 +13,7 @@ extends Node
 ## Keys: F6 pause/resume, F7 pollution overlay, F8 traffic overlay.
 
 signal month_closed(budget : Dictionary)
+signal checkpoint_finished(operation : String, success : bool)
 
 const SIDECAR := "res://sc4-lab/adapters/openglassbox/openglassbox_sidecar.py"
 const OVERLAY_LIFT := 0.6
@@ -30,8 +31,13 @@ var last_stats : Dictionary = {}
 var pollution_total := 0
 var busy_segments := 0
 var simulation_date := "2000-01-01"
+var show_diagnostics := false
 var failure := ""
 var _generation := 0
+var checkpoint_status := ""
+var _checkpoint_operation := ""
+var _checkpoint_started := false
+var _checkpoint_since := 0
 var checkpoint_path := "user://city-simulation-checkpoint.json"
 var _city : Node
 # One worker thread owns the sidecar pipe while running (a game day of a large
@@ -83,6 +89,8 @@ func stop() -> void:
     if _thread != null and _thread.is_started():
         _thread.wait_to_finish()
     _thread = null
+    _checkpoint_operation = ""
+    _checkpoint_started = false
     if backend != null:
         backend.stop()
         backend = null
@@ -144,15 +152,21 @@ func _worker() -> void:
         if spare > 0:
             OS.delay_msec(spare)
 
+func set_paused(paused : bool) -> void:
+    if failure.is_empty() and _checkpoint_operation.is_empty():
+        running = not paused
+    _update_hud()
+
 func _unhandled_input(event : InputEvent) -> void:
     if event is InputEventKey and event.pressed and not event.echo:
         match event.keycode:
             KEY_F6:
-                if failure.is_empty():
-                    running = not running
+                set_paused(running)
+            KEY_F11:
+                show_diagnostics = not show_diagnostics
                 _update_hud()
-            KEY_F9: save_checkpoint()
-            KEY_F10: restore_checkpoint()
+            KEY_F9: request_checkpoint("save")
+            KEY_F10: request_checkpoint("restore")
             KEY_F7: if _pollution_mesh: _pollution_mesh.visible = not _pollution_mesh.visible
             KEY_F8: if _traffic_mesh: _traffic_mesh.visible = not _traffic_mesh.visible
 
@@ -171,68 +185,145 @@ func _resume_worker() -> void:
     _thread = Thread.new()
     _thread.start(_worker)
 
-func _refresh_checkpoint_view() -> void:
+# Main thread polls completion; it never joins a live thread for a checkpoint.
+# The existing day worker finishes its request before the checkpoint worker owns
+# the pipe. No scene nodes are accessed by checkpoint work.
+func request_checkpoint(operation : String) -> bool:
+    if backend == null or not _checkpoint_operation.is_empty() or operation not in ["save", "restore"]:
+        return false
+    running = false
+    _stop_requested = true
+    _generation += 1
+    _checkpoint_operation = operation
+    _checkpoint_started = false
+    _checkpoint_since = Time.get_ticks_msec()
+    checkpoint_status = "Waiting for current simulation day"
+    _update_hud()
+    return true
+
+func _process(_delta : float) -> void:
+    if _checkpoint_operation.is_empty():
+        return
+    if _thread != null and _thread.is_alive():
+        _update_hud()
+        return
+    if not _checkpoint_started:
+        if _thread != null and _thread.is_started():
+            _thread.wait_to_finish()
+        _thread = Thread.new()
+        _checkpoint_started = true
+        checkpoint_status = "Saving checkpoint" if _checkpoint_operation == "save" else "Replaying checkpoint"
+        var error := _thread.start(_checkpoint_io.bind(_checkpoint_operation, checkpoint_path, city_model.duplicate(true)))
+        if error != OK:
+            _thread = null
+            _finish_checkpoint({"error": "Could not start checkpoint worker (%d)" % error})
+    else:
+        var result : Dictionary = _thread.wait_to_finish()
+        _thread = null
+        _finish_checkpoint(result)
+    _update_hud()
+
+func _finish_checkpoint(result : Dictionary) -> void:
+    var operation := _checkpoint_operation
+    _checkpoint_operation = ""
+    _checkpoint_started = false
+    _apply_checkpoint_result(result)
+    checkpoint_status = "Checkpoint %s %s" % [operation, "failed" if result.has("error") else "complete"]
+    _resume_worker()
+    _update_hud()
+    checkpoint_finished.emit(operation, not result.has("error"))
+
+# Worker-only plain-data result, including display refresh, so replay and large
+# layer reads cannot block input/rendering. Preserve the original I/O diagnostic.
+func _checkpoint_io(operation : String, path : String, model : Dictionary) -> Dictionary:
+    var problem := ""
+    if operation == "save":
+        var state := backend.save_state()
+        if state.is_empty():
+            problem = "Checkpoint save failed: %s" % backend.last_error
+        else:
+            var file := FileAccess.open(path + ".tmp", FileAccess.WRITE)
+            if file == null:
+                problem = "Cannot open checkpoint temporary file (%d)" % FileAccess.get_open_error()
+            else:
+                file.store_string(JSON.stringify(state, "", true, true))
+                file.flush()
+                var error := file.get_error()
+                file.close()
+                if error == OK:
+                    error = DirAccess.rename_absolute(ProjectSettings.globalize_path(path + ".tmp"), ProjectSettings.globalize_path(path))
+                if error != OK:
+                    problem = "Cannot write/replace checkpoint (%d)" % error
+                    DirAccess.remove_absolute(ProjectSettings.globalize_path(path + ".tmp"))
+    else:
+        var file := FileAccess.open(path, FileAccess.READ)
+        if file == null:
+            problem = "Cannot open checkpoint (%d)" % FileAccess.get_open_error()
+        elif file.get_length() > OpenGlassBoxSidecarBackend.MAX_REPLY_BYTES:
+            problem = "Checkpoint exceeds size limit"
+            file.close()
+        else:
+            var parser := JSON.new()
+            var parse_error := parser.parse(file.get_as_text())
+            var parsed = parser.data
+            file.close()
+            if parse_error != OK or not parsed is Dictionary or not parsed.get("initial") is Dictionary or not parsed.initial.get("city") is Dictionary:
+                problem = "Invalid checkpoint structure"
+            elif parsed.initial.city != JSON.parse_string(JSON.stringify(model, "", true, true)):
+                problem = "Checkpoint belongs to a different city"
+            else:
+                if not backend.is_running():
+                    backend.start(SIDECAR)
+                if not backend.load_state(parsed):
+                    problem = "Checkpoint restore rejected: %s" % backend.last_error
+    var view := _checkpoint_view()
+    if not problem.is_empty():
+        view["error"] = problem
+    return view
+
+func _checkpoint_view() -> Dictionary:
     var state := backend.snapshot()
     if state.is_empty():
-        failure = str(backend.last_error)
+        return {"error": "Checkpoint refresh failed: %s" % backend.last_error}
+    var layer_reply := backend.apply_command({"type": "city_layer", "name": "AirPollution"})
+    if not bool(layer_reply.get("accepted", false)):
+        return {"error": "Checkpoint layer failed: %s" % backend.last_error}
+    var traffic_reply := backend.apply_command({"type": "city_traffic"})
+    if not bool(traffic_reply.get("accepted", false)):
+        return {"error": "Checkpoint traffic failed: %s" % backend.last_error}
+    return {"state": state, "layer": layer_reply.get("layer", {}), "segments": traffic_reply.get("traffic", {}).get("segments", [])}
+
+func _apply_checkpoint_result(result : Dictionary) -> void:
+    failure = str(result.get("error", ""))
+    if not result.has("state"):
         return
+    var state : Dictionary = result.state
     day = int(state.get("elapsed_days", day))
     simulation_date = str(state.get("date", simulation_date))
     funds = int(state.get("funds", funds))
-    var layer_reply := backend.apply_command({"type": "city_layer", "name": "AirPollution"})
-    var traffic_reply := backend.apply_command({"type": "city_traffic"})
-    if not bool(layer_reply.get("accepted", false)) or not bool(traffic_reply.get("accepted", false)):
-        failure = str(backend.last_error)
-        return
-    var layer : Dictionary = layer_reply.get("layer", {})
-    pollution_total = int(layer.get("total", 0))
-    _draw_pollution(layer)
-    _draw_traffic(traffic_reply.get("traffic", {}).get("segments", []))
+    pollution_total = int(result.layer.get("total", 0))
+    _draw_pollution(result.layer)
+    _draw_traffic(result.segments)
     last_budget = {}
     last_stats = state
 
-func save_checkpoint() -> bool:
-    if backend == null:
+# Synchronous entry points retained for headless callers. Interactive input uses
+# request_checkpoint; reject concurrent calls rather than sharing the pipe.
+func _checkpoint_sync(operation : String) -> bool:
+    if backend == null or not _checkpoint_operation.is_empty():
         return false
     _join_worker()
-    var state := backend.save_state()
-    var success := false
-    if not state.is_empty():
-        var file := FileAccess.open(checkpoint_path + ".tmp", FileAccess.WRITE)
-        if file != null:
-            file.store_string(JSON.stringify(state, "", true, true))
-            file.flush()
-            var write_error := file.get_error()
-            file.close()
-            if write_error == OK:
-                success = DirAccess.rename_absolute(ProjectSettings.globalize_path(checkpoint_path + ".tmp"),
-                    ProjectSettings.globalize_path(checkpoint_path)) == OK
-    failure = "" if success else "Checkpoint save failed: %s" % backend.last_error
-    _refresh_checkpoint_view()
+    var result := _checkpoint_io(operation, checkpoint_path, city_model)
+    _apply_checkpoint_result(result)
     _resume_worker()
     _update_hud()
-    return success
+    return not result.has("error")
+
+func save_checkpoint() -> bool:
+    return _checkpoint_sync("save")
 
 func restore_checkpoint() -> bool:
-    if backend == null:
-        return false
-    _join_worker()
-    var parsed = JSON.parse_string(FileAccess.get_file_as_string(checkpoint_path))
-    var success := false
-    if parsed is Dictionary:
-        # A checkpoint belongs to this loaded city's geometry, not another map.
-        var saved_city : Dictionary = parsed.get("initial", {}).get("city", {})
-        var normalized_city : Dictionary = JSON.parse_string(JSON.stringify(city_model, "", true, true))
-        if saved_city == normalized_city:
-            if not backend.is_running():
-                backend.start(SIDECAR)
-            success = backend.load_state(parsed)
-    failure = "" if success else "Checkpoint restore rejected: %s" % backend.last_error
-    if success:
-        _refresh_checkpoint_view()
-    _resume_worker()
-    _update_hud()
-    return success
+    return _checkpoint_sync("restore")
 
 # -- views ---------------------------------------------------------------------
 
@@ -353,11 +444,18 @@ func _update_hud() -> void:
     if _hud == null:
         return
     var lines := PackedStringArray()
-    lines.append("SIM %s   day %d   (F6 pause, F7 pollution, F8 traffic)" % ["RUNNING" if running else "PAUSED", day])
-    lines.append("%s   F9 save checkpoint / F10 restore" % simulation_date)
+    lines.append("%s   %s   Funds §%s" % [simulation_date, "Running" if running else "Paused", _thousands(funds)])
+    lines.append("Simulation preview · F6 pause · F7 pollution · F8 traffic")
+    lines.append("F9 checkpoint · F10 restore · F11 details")
+    if not checkpoint_status.is_empty():
+        var elapsed := " (%ds)" % ((Time.get_ticks_msec() - _checkpoint_since) / 1000) if not _checkpoint_operation.is_empty() else ""
+        lines.append(checkpoint_status + elapsed)
     if not failure.is_empty():
         lines.append("SIM ERROR: %s" % failure)
-    lines.append("Funds  §%s" % _thousands(funds))
+    if not show_diagnostics:
+        _hud.text = "\n".join(lines)
+        return
+    lines.append("Day %d · candidate traffic/pollution; placeholder tax bases" % day)
     if not last_budget.is_empty():
         lines.append("Last month  tax §%s  upkeep §%s   [tax rule TAX_001 verified; bases placeholder]" % [
             _thousands(int(last_budget.get("tax_income", 0))), _thousands(int(last_budget.get("expenses", 0)))])

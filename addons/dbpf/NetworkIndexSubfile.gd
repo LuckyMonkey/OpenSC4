@@ -107,28 +107,91 @@ func load(file, dbdf=null):
 # defensive fallback and as a useful cross-check; this richer representation is
 # what a future writer will need. Values are dictionaries so they remain plain
 # data and do not become a second simulation model.
+# Bounds checks also latch failure: reaching EOF after a truncated read must
+# never make the experimental writer consider an incomplete decode successful.
+class CheckedReader:
+    var data : PackedByteArray
+    var position := 0
+    var valid := true
+
+    func _init(bytes : PackedByteArray):
+        data = bytes
+
+    func take(count : int) -> PackedByteArray:
+        if not valid or count < 0 or count > data.size() - position:
+            valid = false
+            return PackedByteArray()
+        var result := data.slice(position, position + count)
+        position += count
+        return result
+
+    func get_u8() -> int:
+        var bytes := take(1)
+        return bytes[0] if valid else 0
+
+    func get_u16() -> int:
+        var bytes := take(2)
+        return bytes.decode_u16(0) if valid else 0
+
+    func get_u32() -> int:
+        var bytes := take(4)
+        return bytes.decode_u32(0) if valid else 0
+
+    func get_count(minimum_size : int) -> int:
+        var count := get_u32()
+        if not valid or count > (data.size() - position) / minimum_size:
+            valid = false
+            return 0
+        return count
+
+    func get_position() -> int:
+        return position
+
 func _decode_structured_index():
-    var buf = StreamPeerBuffer.new()
-    buf.data_array = raw_data
-    buf.seek(18) # size, crc, mem, major, city tile count
+    structured_decode_ok = false
+    tiles.clear()
+    intersections.clear()
+    transit_enabled_tiles.clear()
+    y_intersections.clear()
+    tail_unknown.clear()
+    tail_bytes = PackedByteArray()
+    tail_tile_x = 0
+    tail_tile_z = 0
+    if raw_data.size() >= 22 and city_tile_count > 0:
+        _decode_structured_body()
+    if not structured_decode_ok:
+        # Keep independently scanned tile_refs, never publish partial writer data.
+        tiles.clear()
+        intersections.clear()
+        transit_enabled_tiles.clear()
+        y_intersections.clear()
+        tail_unknown.clear()
+        tail_bytes = PackedByteArray()
+        tail_tile_x = 0
+        tail_tile_z = 0
+        Log.warn("NetworkIndexSubfile: unsupported or truncated structured layout; using reference scan only")
+
+func _decode_structured_body():
+    var buf = CheckedReader.new(raw_data)
+    buf.take(18) # size, crc, mem, major, city tile count
     if buf.get_position() + 4 > raw_data.size():
         return
-    var tile_count = buf.get_u32()
+    var tile_count = buf.get_count(83)
     tiles.clear()
     for _i in range(tile_count):
         var number = buf.get_u32()
         var pointer = _read_pointer(buf)
         var blocks = []
-        var block_count = buf.get_u32()
+        var block_count = buf.get_count(8)
         for _block_i in range(block_count):
             var block_number = buf.get_u32()
             var bytes = []
-            var byte_count = buf.get_u32()
+            var byte_count = buf.get_count(8)
             for _byte_i in range(byte_count):
                 bytes.append(_read_bytes(buf, 8))
             blocks.append({"number": block_number, "bytes": bytes})
         var automata = []
-        var automata_count = buf.get_u32()
+        var automata_count = buf.get_count(4)
         for _automata_i in range(automata_count):
             automata.append(_read_pointer(buf))
         var tile_unknown = {
@@ -140,7 +203,7 @@ func _decode_structured_index():
             reps.append(_read_bytes(buf, 12))
         var reps_unknown = buf.get_u16()
         var reps2 = []
-        var reps2_count = buf.get_u32()
+        var reps2_count = buf.get_count(10)
         for _rep2_i in range(reps2_count):
             reps2.append({"number": buf.get_u32(), "bytes": _read_bytes(buf, 6)})
         tiles.append({
@@ -157,7 +220,7 @@ func _decode_structured_index():
         })
 
     intersections.clear()
-    var intersection_count = buf.get_u32()
+    var intersection_count = buf.get_count(77)
     for _intersection_i in range(intersection_count):
         var intersection = {
             "pointer": _read_pointer(buf),
@@ -179,7 +242,7 @@ func _decode_structured_index():
         intersections.append(intersection)
 
     transit_enabled_tiles.clear()
-    var transit_count = buf.get_u32()
+    var transit_count = buf.get_count(12)
     for _transit_i in range(transit_count):
         transit_enabled_tiles.append({
             "z": buf.get_u16(),
@@ -194,33 +257,30 @@ func _decode_structured_index():
     tail_bytes = _read_bytes(buf, 10)
     y_intersections.clear()
     if major != 3:
-        var y_count = buf.get_u32()
+        var y_count = buf.get_count(28)
         for _y_i in range(y_count):
             var y = {"pointer": _read_pointer(buf), "directions": {}}
             for direction in ["west", "north", "east", "south"]:
                 var values = []
-                var value_count = buf.get_u32()
+                var value_count = buf.get_count(4)
                 for _value_i in range(value_count):
                     values.append(buf.get_u32())
                 y["directions"][direction] = {"values": values, "word": buf.get_u16()}
             y_intersections.append(y)
 
-    structured_decode_ok = buf.get_position() == raw_data.size()
+    structured_decode_ok = buf.valid and buf.get_position() == raw_data.size()
     if not structured_decode_ok:
         Log.warn("NetworkIndexSubfile: structured decode left %d bytes" %
             (raw_data.size() - buf.get_position()))
 
-func _read_pointer(buf : StreamPeerBuffer) -> Dictionary:
+func _read_pointer(buf : CheckedReader) -> Dictionary:
     var mem = buf.get_u32()
     if mem == 0:
         return {"mem": 0, "type": 0}
     return {"mem": mem, "type": buf.get_u32()}
 
-func _read_bytes(buf : StreamPeerBuffer, count : int) -> PackedByteArray:
-    var start = buf.get_position()
-    var bytes = raw_data.slice(start, start + count)
-    buf.seek(start + count)
-    return bytes
+func _read_bytes(buf : CheckedReader, count : int) -> PackedByteArray:
+    return buf.take(count)
 
 # Scans forward from `from` for the next reference triple, recognising it by a
 # known network subfile type id in the third dword and a plausible tile number.

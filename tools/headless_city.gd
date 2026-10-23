@@ -46,6 +46,10 @@ func _ready():
 
     for dat_file in dat_files:
         var dbpf = DBPF.new(Core.game_dir + "/" + dat_file)
+        if not dbpf.loaded:
+            push_error("City sweep aborted: unreadable/invalid archive " + dat_file)
+            get_tree().quit(1)
+            return
         Core.add_dbpf(dbpf)
     print("DATs loaded")
 
@@ -55,6 +59,10 @@ func _ready():
         get_tree().quit(1)
         return
     Boot.current_city = DBPF.new(city_path)
+    if not Boot.current_city.loaded:
+        push_error("City sweep aborted: unreadable/invalid city save")
+        get_tree().quit(1)
+        return
     Boot.current_city_name = city_name
     Boot.current_city_path = city_path
     Boot.current_region_name = region

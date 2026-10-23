@@ -39,7 +39,9 @@ OPENSC4_SIM=0 godot --path .       # same, without simulating
 In the city: **F6** pause/resume, **F7** pollution overlay, **F8** traffic
 overlay. The HUD (top right) shows day, funds, last month's tax and upkeep,
 commuters, busy road links and total air pollution. **F9** saves a local simulation
-checkpoint; **F10** restores it and refreshes overlays. Checkpoint operations leave
+checkpoint; **F10** restores it and refreshes overlays. Both run asynchronously;
+the HUD shows waiting/saving/replaying status and elapsed seconds. Repeated
+checkpoint requests are ignored until the current operation completes. Checkpoint operations leave
 the simulation paused; F6 resumes. They operate on OpenSC4 candidate state, not
 retail `.sc4` saves. The checkpoint must match the loaded city and exact engine
 identity. Date starts at 2000-01-01 and uses Gregorian month boundaries, not a
@@ -48,6 +50,7 @@ native save date. See `../milestones/city-runtime-v0.2.md` for limits and checks
 Headless and visual checks:
 
 ```bash
+godot --headless --path . res://tools/SimCity.tscn -- 3 Timbuktu "Big City Tutorial" checkpoint # save/advance/restore
 godot --headless --path . res://tools/SimCity.tscn -- 31        # ends with SIM DONE
 godot --path . --resolution 1600x900 res://tools/ScreenshotCity.tscn -- /tmp/shots \
     Timbuktu "Big City Tutorial" sim=2 "64,64,2,2,overview"

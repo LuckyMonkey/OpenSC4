@@ -19,6 +19,17 @@ reviewable interface.
 - [ ] Add asynchronous checkpoint progress/cancellation and explicit migration
   policy before broadening persistent simulation state or modifying player saves.
 
+## Original-asset presentation priorities
+
+- [x] Inventory original UI/terrain/network resources and integrate the first
+  original city-control panel (`milestones/original-city-assets-v0.1.md`).
+- [ ] Match terrain parameter-driven beach, cliff, elevation and slope blending
+  across coastal/mountain cities and zoom levels.
+- [ ] Complete road intersections, diagonals, wealth/orientation variants and
+  RUL connectivity, with visual fixtures before native save expansion.
+- [ ] Connect original transportation/zoning submenu assets to implemented tools.
+- [ ] Integrate original budget/data panels, local fonts and button sounds.
+
 ## P1 — next implementation milestones
 
 - [ ] Add the first held-in/held-out power observation corpus and independent

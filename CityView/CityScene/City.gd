@@ -32,6 +32,9 @@ func _ready():
     set_cursor()
     _setup_city_editor()
     _start_city_sim()
+    var controls := Sc4CityControls.new()
+    controls.city = self
+    $UICanvas.add_child(controls)
 
 # Runs the city on the OpenGlassBox candidate backend (simulation/city_sim.gd).
 # Set OPENSC4_SIM=0 to load the city without simulating it.

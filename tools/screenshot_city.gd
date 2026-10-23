@@ -42,6 +42,11 @@ func _ready():
         get_tree().quit(1)
         return
     var out_dir = user_args[0]
+    var directory_error := DirAccess.make_dir_recursive_absolute(out_dir)
+    if directory_error != OK:
+        push_error("Cannot create screenshot directory (%d)" % directory_error)
+        get_tree().quit(1)
+        return
     var region = DEFAULT_REGION
     var city_name = DEFAULT_CITY
     var shots : Array = []
@@ -109,15 +114,18 @@ func _ready():
     var half = city.size_w * 64 / 2.0    # world units are tiles
 
     if shots.is_empty():
-        await _capture("%s/city_zoom1.png" % out_dir)
+        if not await _capture("%s/city_zoom1.png" % out_dir):
+            return
         # Closer pass: move the iso camera to the map centre at zoom 4 so
         # building clusters/alignment are inspectable.
         _aim(city, cam, half, half, 4, cam.rotated)
-        await _capture("%s/city_zoom4.png" % out_dir)
+        if not await _capture("%s/city_zoom4.png" % out_dir):
+            return
     else:
         for shot in shots:
             _aim(city, cam, shot.tx, shot.tz, shot.zoom, shot.rot)
-            await _capture("%s/%s.png" % [out_dir, shot.name])
+            if not await _capture("%s/%s.png" % [out_dir, shot.name]):
+                return
 
     print("SCREENSHOTS DONE")
     get_tree().quit()
@@ -159,11 +167,16 @@ func _aim(city : Node, cam : Node, tx : float, tz : float, zoom : int, rot : int
     cam.transform.origin = Vector3(target.x, cam.transform.origin.y, target.z)
     cam._zoom_step(0)
 
-func _capture(path : String):
+func _capture(path : String) -> bool:
     # Let a few frames render so meshes/textures are on screen.
     for i in range(6):
         await get_tree().process_frame
     await RenderingServer.frame_post_draw
     var img = get_viewport().get_texture().get_image()
-    img.save_png(path)
+    var error := img.save_png(path)
+    if error != OK:
+        push_error("Screenshot write failed (%d): %s" % [error, path])
+        get_tree().quit(1)
+        return false
     print("saved %s" % path)
+    return true
